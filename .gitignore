@@ -27,3 +27,9 @@ Thumbs.db
 # Temp
 tmp/
 *.tmp
+
+# PostgreSQL data
+apps/api/data/
+
+# Claude
+.claude/

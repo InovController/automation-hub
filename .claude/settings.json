@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(powershell.exe -Command \"Get-ChildItem -Path 'C:\\\\Users\\\\davi.inov\\\\AppData\\\\Local' -Recurse -Filter 'claude.exe' -ErrorAction SilentlyContinue | Select-Object -First 5 FullName\")",
-      "Bash(powershell.exe -Command ':*)"
-    ]
-  }
-}
