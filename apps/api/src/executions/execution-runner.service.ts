@@ -1,0 +1,532 @@
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import os from 'node:os';
+import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { ExecutionStatus } from '@prisma/client';
+import { ExecutionsService } from './executions.service';
+import { listFilesRecursively, sanitizeFileName, toUserFileName } from '../shared/files';
+import {
+  ensureExecutionDirs,
+  ensureStorageRoot,
+  executionRoot,
+  inputDir,
+  metadataDir,
+  outputDir,
+  storageRoot,
+} from '../shared/storage';
+
+type RunningProcess = {
+  child: ReturnType<typeof spawn>;
+  metrics: Record<string, number>;
+};
+
+@Injectable()
+export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(ExecutionRunnerService.name);
+  private readonly runningProcesses = new Map<string, RunningProcess>();
+  private readonly stoppedExecutions = new Set<string>();
+  private timer?: NodeJS.Timeout;
+  private isProcessingQueue = false;
+
+  constructor(private readonly executionsService: ExecutionsService) {}
+
+  async onModuleInit() {
+    await ensureStorageRoot();
+    await this.processQueue();
+    this.timer = setInterval(() => {
+      void this.processQueue();
+    }, 3000);
+  }
+
+  onModuleDestroy() {
+    if (this.timer) {
+      clearInterval(this.timer);
+    }
+
+    for (const processRef of this.runningProcesses.values()) {
+      void terminateProcessTree(processRef.child.pid);
+    }
+  }
+
+  async stopExecution(executionId: string) {
+    const running = this.runningProcesses.get(executionId);
+    this.stoppedExecutions.add(executionId);
+    if (running) {
+      await terminateProcessTree(running.child.pid);
+      this.runningProcesses.delete(executionId);
+      await this.executionsService.log(executionId, 'warn', 'Processo interrompido pelo usuario.');
+    }
+  }
+
+  private async processQueue() {
+    if (this.isProcessingQueue) {
+      return;
+    }
+
+    this.isProcessingQueue = true;
+
+    try {
+      const runningExecutions = await this.executionsService.listRunningExecutions();
+      const queuedExecutions = await this.executionsService.listQueuedExecutions();
+      if (queuedExecutions.length === 0) {
+        return;
+      }
+
+      const globalLimit = getGlobalConcurrencyLimit();
+      const memoryUsage = getMemoryUsagePercentage();
+      const memoryThreshold = getMemoryThresholdPercentage();
+      const projectedExecutions = [...runningExecutions];
+      const availableSlots = Math.max(0, globalLimit - runningExecutions.length);
+
+      if (availableSlots <= 0) {
+        await this.updateQueuedReasons(queuedExecutions, `Aguardando capacidade do servidor (${runningExecutions.length}/${globalLimit} em execucao).`);
+        return;
+      }
+
+      if (memoryUsage >= memoryThreshold) {
+        await this.updateQueuedReasons(
+          queuedExecutions,
+          `Fila pausada automaticamente: memoria do servidor em ${memoryUsage}% (limite ${memoryThreshold}%).`,
+        );
+        return;
+      }
+
+      const selectedExecutionIds: string[] = [];
+      const blockedReasons = new Map<string, string>();
+
+      for (const execution of queuedExecutions) {
+        if (selectedExecutionIds.length >= availableSlots) {
+          blockedReasons.set(
+            execution.id,
+            `Aguardando capacidade do servidor (${projectedExecutions.length}/${globalLimit} em execucao).`,
+          );
+          continue;
+        }
+
+        const blocker = this.getExecutionBlocker(execution, projectedExecutions, globalLimit);
+        if (blocker) {
+          blockedReasons.set(execution.id, blocker);
+          continue;
+        }
+
+        selectedExecutionIds.push(execution.id);
+        projectedExecutions.push({
+          ...execution,
+          status: ExecutionStatus.running,
+        });
+      }
+
+      const blockedExecutions = queuedExecutions.filter((execution) => blockedReasons.has(execution.id));
+      await this.updateQueuedReasons(
+        blockedExecutions,
+        undefined,
+        blockedReasons,
+      );
+
+      for (const executionId of selectedExecutionIds) {
+        void this.runExecution(executionId);
+      }
+    } catch (error) {
+      this.logger.error('Failed to process queue', error);
+    } finally {
+      this.isProcessingQueue = false;
+    }
+  }
+
+  private getExecutionBlocker(
+    execution: Awaited<ReturnType<ExecutionsService['listQueuedExecutions']>>[number],
+    projectedExecutions: Awaited<ReturnType<ExecutionsService['listRunningExecutions']>>,
+    globalLimit: number,
+  ) {
+    if (projectedExecutions.length >= globalLimit) {
+      return `Aguardando capacidade do servidor (${projectedExecutions.length}/${globalLimit} em execucao).`;
+    }
+
+    const robotRunningCount = projectedExecutions.filter(
+      (item) => item.robotId === execution.robotId,
+    ).length;
+    const robotLimit = Math.max(1, execution.robot.maxConcurrency || 1);
+    if (robotRunningCount >= robotLimit) {
+      return `Aguardando vaga para o robo "${execution.robot.name}" (${robotRunningCount}/${robotLimit} em execucao).`;
+    }
+
+    const executionConflicts = parseConflictKeys(execution.robot.conflictKeys);
+    if (executionConflicts.length > 0) {
+      const conflictingExecution = projectedExecutions.find((item) =>
+        hasConflict(executionConflicts, parseConflictKeys(item.robot.conflictKeys)),
+      );
+      if (conflictingExecution) {
+        return `Aguardando liberacao de recurso compartilhado (${executionConflicts.join(', ')}) usado por "${conflictingExecution.robot.name}".`;
+      }
+    }
+
+    return null;
+  }
+
+  private async updateQueuedReasons(
+    queuedExecutions: Array<{ id: string }>,
+    fallbackReason?: string,
+    explicitReasons?: Map<string, string>,
+  ) {
+    await Promise.all(
+      queuedExecutions.map(async (execution) => {
+        const reason = explicitReasons?.get(execution.id) ?? fallbackReason;
+        if (!reason) {
+          return;
+        }
+
+        await this.executionsService.updateQueueReason(execution.id, reason);
+      }),
+    );
+  }
+
+  private async runExecution(executionId: string) {
+    const execution = await this.executionsService.markAsRunning(executionId);
+    await ensureExecutionDirs(execution.id);
+    await this.writeExecutionMetadata(execution.id, execution.inputJson, execution.robot);
+    await this.executionsService.log(execution.id, 'info', 'Execucao iniciada.');
+
+    try {
+      if (!execution.robot.command) {
+        throw new Error(
+          'Esta automacao nao possui comando configurado. Defina o comando e a pasta de execucao nas configuracoes.',
+        );
+      }
+
+      await this.runCommandExecution(
+        execution.id,
+        execution.robot.command,
+        execution.robot.workingDirectory,
+      );
+      if (this.stoppedExecutions.has(execution.id)) {
+        return;
+      }
+
+      const unitsMetricKey =
+        normalizeMetricKey(execution.robot.unitMetricKey) ?? 'itens_processados';
+      const unitsProcessedRaw =
+        this.runningProcesses.get(execution.id)?.metrics[unitsMetricKey];
+      const unitsProcessed =
+        typeof unitsProcessedRaw === 'number' && Number.isFinite(unitsProcessedRaw)
+          ? Math.max(0, Math.round(unitsProcessedRaw))
+          : null;
+
+      const outputFiles = await this.registerOutputFiles(execution.id);
+
+      await this.executionsService.markAsSuccess(
+        execution.id,
+        outputFiles.length > 0 ? 'Arquivos prontos para download' : 'Execucao concluida',
+        undefined,
+        { unitsProcessed },
+      );
+
+      await this.executionsService.log(execution.id, 'info', 'Execucao finalizada com sucesso.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha inesperada durante a execucao';
+      const current = await this.executionsService.getExecution(execution.id);
+
+      if (current.status !== ExecutionStatus.canceled) {
+        await this.executionsService.markAsError(execution.id, message);
+        await this.executionsService.log(execution.id, 'error', message);
+      }
+    } finally {
+      this.runningProcesses.delete(execution.id);
+      this.stoppedExecutions.delete(execution.id);
+      void this.processQueue();
+    }
+  }
+
+  private async runCommandExecution(
+    executionId: string,
+    command: string,
+    workingDirectory?: string | null,
+  ) {
+    await this.executionsService.log(executionId, 'info', `Iniciando comando: ${command}`);
+    await this.executionsService.updateProgress(executionId, 25, 'Executando automacao');
+
+    const cwd = workingDirectory ? resolveWorkingDirectory(workingDirectory) : process.cwd();
+    const child = spawn(command, {
+      cwd,
+      shell: true,
+      env: {
+        ...process.env,
+        AUTOMATION_EXECUTION_ID: executionId,
+        AUTOMATION_INPUT_DIR: inputDir(executionId),
+        AUTOMATION_OUTPUT_DIR: outputDir(executionId),
+        AUTOMATION_EXECUTION_DIR: executionRoot(executionId),
+        AUTOMATION_METADATA_DIR: metadataDir(executionId),
+        AUTOMATION_PARAMETERS_FILE: join(metadataDir(executionId), 'parameters.json'),
+        AUTOMATION_CONTEXT_FILE: join(metadataDir(executionId), 'context.json'),
+      },
+    });
+
+    this.runningProcesses.set(executionId, { child, metrics: {} });
+
+    const stdoutReader = createLineReader(async (line) => {
+      await this.handleProcessLine(executionId, line, 'info');
+    });
+    const stderrReader = createLineReader(async (line) => {
+      await this.handleProcessLine(executionId, line, 'error');
+    });
+
+    child.stdout.on('data', (chunk) => {
+      stdoutReader.push(chunk.toString());
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderrReader.push(chunk.toString());
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      child.on('close', async (code) => {
+        try {
+          await stdoutReader.flush();
+          await stderrReader.flush();
+
+          if (code === 0) {
+            resolve();
+            return;
+          }
+
+          reject(new Error(`Comando finalizado com codigo ${code ?? 'desconhecido'}`));
+        } catch (error) {
+          reject(error);
+        }
+      });
+
+      child.on('error', (error) => {
+        reject(error);
+      });
+    });
+
+    if (!this.stoppedExecutions.has(executionId)) {
+      await this.executionsService.updateProgress(executionId, 90, 'Finalizando saidas');
+    }
+  }
+
+  private async registerOutputFiles(executionId: string) {
+    const outputRoot = outputDir(executionId);
+    const files = await listFilesRecursively(outputRoot);
+
+    const storedFiles: unknown[] = [];
+    for (const fullPath of files) {
+      const relativePath = relative(storageRoot, fullPath).replaceAll('\\', '/');
+      const name = sanitizeFileName(fullPath.split(/[\\/]/).pop() ?? 'output');
+      const userFileName = toUserFileName(name);
+
+      storedFiles.push(
+        await this.executionsService.registerOutputFile({
+          executionId,
+          kind: 'output',
+          filename: name,
+          storagePath: relativePath,
+          downloadName: userFileName,
+        }),
+      );
+    }
+
+    return storedFiles;
+  }
+
+  private async writeExecutionMetadata(
+    executionId: string,
+    parameters: unknown,
+    robot: { id: string; slug: string; name: string },
+  ) {
+    const metadataRoot = metadataDir(executionId);
+
+    await writeFile(
+      join(metadataRoot, 'parameters.json'),
+      JSON.stringify(parameters ?? {}, null, 2),
+      'utf8',
+    );
+
+    await writeFile(
+      join(metadataRoot, 'context.json'),
+      JSON.stringify(
+        {
+          executionId,
+          robot,
+          inputDir: inputDir(executionId),
+          outputDir: outputDir(executionId),
+          metadataDir: metadataRoot,
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+  }
+
+  private async handleProcessLine(
+    executionId: string,
+    rawLine: string,
+    fallbackLevel: string,
+  ) {
+    if (this.stoppedExecutions.has(executionId)) {
+      return;
+    }
+
+    const line = rawLine.trim();
+    if (!line) {
+      return;
+    }
+
+    const progressMatch = line.match(/^AH_PROGRESS\|(\d{1,3})\|(.*)$/);
+    if (progressMatch) {
+      const progress = Number(progressMatch[1]);
+      const step = progressMatch[2].trim() || 'Executando automacao';
+      await this.executionsService.updateProgress(executionId, Math.max(0, Math.min(100, progress)), step);
+      await this.executionsService.log(executionId, 'info', step);
+      return;
+    }
+
+    const logMatch = line.match(/^AH_LOG\|(info|warn|error)\|(.*)$/i);
+    if (logMatch) {
+      await this.executionsService.log(executionId, logMatch[1].toLowerCase(), logMatch[2].trim());
+      return;
+    }
+
+    const metricMatch = line.match(/^AH_METRIC\|([a-z0-9_.-]+)\|(-?\d+(?:[.,]\d+)?)$/i);
+    if (metricMatch) {
+      const rawKey = metricMatch[1];
+      const parsedValue = Number(metricMatch[2].replace(',', '.'));
+      const metricKey = normalizeMetricKey(rawKey);
+      if (metricKey && Number.isFinite(parsedValue)) {
+        const running = this.runningProcesses.get(executionId);
+        if (running) {
+          running.metrics[metricKey] = (running.metrics[metricKey] ?? 0) + parsedValue;
+        }
+        await this.executionsService.log(
+          executionId,
+          'info',
+          `Metrica registrada: ${metricKey}=${parsedValue}`,
+        );
+      }
+      return;
+    }
+
+    await this.executionsService.log(executionId, fallbackLevel, line);
+  }
+}
+
+function terminateProcessTree(pid?: number) {
+  if (!pid) {
+    return Promise.resolve();
+  }
+
+  if (process.platform === 'win32') {
+    return new Promise<void>((resolve) => {
+      const killer = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], {
+        shell: false,
+        windowsHide: true,
+      });
+      killer.on('close', () => resolve());
+      killer.on('error', () => resolve());
+    });
+  }
+
+  return new Promise<void>((resolve) => {
+    try {
+      // Negative PID kills the entire process group on Unix
+      process.kill(-pid, 'SIGTERM');
+    } catch {
+      try {
+        process.kill(pid, 'SIGTERM');
+      } catch {
+        // Process already gone
+      }
+    }
+    resolve();
+  });
+}
+
+function getGlobalConcurrencyLimit() {
+  const raw = Number(process.env.RUNNER_MAX_CONCURRENCY ?? 2);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 2;
+}
+
+function getMemoryThresholdPercentage() {
+  const raw = Number(process.env.RUNNER_MEMORY_THRESHOLD_PERCENT ?? 90);
+  if (!Number.isFinite(raw)) {
+    return 90;
+  }
+
+  return Math.min(99, Math.max(1, Math.floor(raw)));
+}
+
+function getMemoryUsagePercentage() {
+  const total = os.totalmem();
+  const free = os.freemem();
+  const used = total - free;
+  return Math.round((used / total) * 100);
+}
+
+function parseConflictKeys(value?: string | null) {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function hasConflict(left: string[], right: string[]) {
+  if (left.length === 0 || right.length === 0) {
+    return false;
+  }
+
+  const rightSet = new Set(right);
+  return left.some((item) => rightSet.has(item));
+}
+
+function resolveWorkingDirectory(value: string) {
+  if (/^[A-Za-z]:\\/.test(value)) {
+    return value;
+  }
+
+  if (value.startsWith('file://')) {
+    return fileURLToPath(value);
+  }
+
+  return join(process.cwd(), value);
+}
+
+function normalizeMetricKey(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function createLineReader(onLine: (line: string) => Promise<void>) {
+  let buffer = '';
+  let queue = Promise.resolve();
+
+  return {
+    push(chunk: string) {
+      buffer += chunk;
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        queue = queue.then(() => onLine(line));
+      }
+    },
+    async flush() {
+      if (buffer.trim()) {
+        queue = queue.then(() => onLine(buffer));
+      }
+      buffer = '';
+      await queue;
+    },
+  };
+}

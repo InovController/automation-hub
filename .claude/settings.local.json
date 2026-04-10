@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude auth:*)",
+      "Bash(gh --version)",
+      "Bash(gh auth:*)",
+      "Bash(gh repo:*)",
+      "Bash(git rm:*)",
+      "Bash(git remote:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(railway --version)",
+      "Bash(git -C /c/Users/davi.inov/Documents/automation-hub rev-parse --show-toplevel)",
+      "Bash(git init:*)"
+    ]
+  }
+}

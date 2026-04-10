@@ -1,0 +1,13 @@
+services:
+  postgres:
+    container_name: hub_db
+    image: postgres
+    ports:
+      - 5433:5432
+    environment:
+      POSTGRES_USER: hub
+      POSTGRES_PASSWORD: hub123
+      POSTGRES_DB: hub
+      PGDATA: /data/postgres
+    volumes:
+      - ./data/pg:/data/postgres

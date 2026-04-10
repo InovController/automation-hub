@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ExecutionStatus {
+  queued
+  running
+  success
+  error
+  canceled
+}
+
+enum ScheduleFrequency {
+  once
+  daily
+  weekly
+  monthly
+}
+
+enum UserRole {
+  admin
+  manager
+  employee
+}
+
+enum Department {
+  pessoal
+  fiscal
+  contabil
+  tecnologia
+  inovacao
+  legalizacao
+  certificacao
+  auditoria
+  rh
+}
+
+model Robot {
+  id                 String  @id @default(cuid())
+  slug               String  @unique
+  name               String
+  summary            String?
+  description        String?
+  category           String?
+  icon               String? @default("bot")
+  isActive           Boolean @default(true)
+  version            String  @default("1.0.0")
+  estimatedMinutes   Int?
+  maxConcurrency     Int     @default(1)
+  conflictKeys       String?
+  manualSecondsPerUnit Int @default(0)
+  unitLabel          String? @default("item")
+  unitMetricKey      String? @default("itens_processados")
+  command            String?
+  workingDirectory   String?
+  allowedDepartments Department[] @default([])
+  schema             Json?
+  documentationUrl   String?
+  documentationLabel String?
+  supportLabel       String?
+  supportValue       String?
+  dataPolicy         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  executions Execution[]
+  scheduledTasks ScheduledTask[]
+  inputExamples RobotInputExample[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         UserRole  @default(employee)
+  departments  Department[] @default([])
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions   Session[]
+  executions Execution[]
+  scheduledTasks ScheduledTask[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId, expiresAt])
+}
+
+model Execution {
+  id               String @id @default(cuid())
+  robotId          String
+  robot            Robot  @relation(fields: [robotId], references: [id])
+  userId           String?
+  user             User?  @relation(fields: [userId], references: [id])
+  requestedByName  String?
+  requestedByEmail String?
+  notes            String?
+  status           ExecutionStatus @default(queued)
+  priority         Int             @default(0)
+  progress         Int             @default(0)
+  currentStep      String?
+  inputJson        Json?
+  unitsProcessed   Int?
+  manualEstimatedSeconds Int?
+  errorMessage     String?
+  outputZipPath    String?
+  createdAt        DateTime  @default(now())
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  canceledAt       DateTime?
+
+  logs  ExecutionLog[]
+  files ExecutionFile[]
+
+  @@index([robotId])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model ExecutionLog {
+  id          String    @id @default(cuid())
+  executionId String
+  execution   Execution @relation(fields: [executionId], references: [id])
+  level       String    @default("info")
+  message     String
+  timestamp   DateTime  @default(now())
+
+  @@index([executionId, timestamp])
+}
+
+model ExecutionFile {
+  id          String    @id @default(cuid())
+  executionId String
+  execution   Execution @relation(fields: [executionId], references: [id])
+  kind        String    @default("output")
+  filename    String
+  originalName String?
+  storagePath String
+  downloadName String?
+  mimeType    String?
+  size        Int?
+  createdAt   DateTime  @default(now())
+
+  @@index([executionId, createdAt])
+}
+
+model ScheduledTask {
+  id            String            @id @default(cuid())
+  name          String
+  robotId       String
+  robot         Robot             @relation(fields: [robotId], references: [id])
+  userId        String
+  user          User              @relation(fields: [userId], references: [id])
+  frequency     ScheduleFrequency
+  timeOfDay     String
+  startDate     DateTime?
+  dayOfWeek     Int?
+  dayOfMonth    Int?
+  timezone      String            @default("America/Sao_Paulo")
+  notes         String?
+  parameters    Json?
+  isActive      Boolean           @default(true)
+  lastRunAt     DateTime?
+  nextRunAt     DateTime
+  lastError     String?
+  lastExecutionId String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([isActive, nextRunAt])
+  @@index([userId, createdAt])
+  @@index([robotId, createdAt])
+}
+
+model RobotInputExample {
+  id            String   @id @default(cuid())
+  robotId       String
+  robot         Robot    @relation(fields: [robotId], references: [id], onDelete: Cascade)
+  fileInputName String?
+  title         String?
+  description   String?
+  filename      String
+  storagePath   String
+  downloadName  String?
+  mimeType      String?
+  size          Int?
+  createdAt     DateTime @default(now())
+
+  @@index([robotId, createdAt])
+}
