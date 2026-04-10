@@ -54,6 +54,14 @@ export async function ensureScheduleDirs(scheduleId: string) {
   await mkdir(scheduleInputDir(scheduleId), { recursive: true });
 }
 
+export function robotScriptsDir(robotId: string) {
+  return join(robotRoot(robotId), 'scripts');
+}
+
 export async function ensureRobotExampleDirs(robotId: string) {
   await mkdir(robotExamplesDir(robotId), { recursive: true });
+}
+
+export async function ensureRobotScriptsDirs(robotId: string) {
+  await mkdir(robotScriptsDir(robotId), { recursive: true });
 }

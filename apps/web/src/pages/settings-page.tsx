@@ -63,6 +63,8 @@ export function SettingsPage() {
   const [exampleInputName, setExampleInputName] = useState('');
   const [exampleTitle, setExampleTitle] = useState('');
   const [exampleDescription, setExampleDescription] = useState('');
+  const [scriptFile, setScriptFile] = useState<File | null>(null);
+  const [scriptEntryScript, setScriptEntryScript] = useState('');
 
   useEffect(() => {
     void loadUsers();
@@ -84,6 +86,8 @@ export function SettingsPage() {
     setExampleInputName('');
     setExampleTitle('');
     setExampleDescription('');
+    setScriptFile(null);
+    setScriptEntryScript('');
   }, [selectedRobotId]);
 
   useEffect(() => {
@@ -254,6 +258,10 @@ export function SettingsPage() {
             setExampleTitle,
             exampleDescription,
             setExampleDescription,
+            scriptFile,
+            setScriptFile,
+            scriptEntryScript,
+            setScriptEntryScript,
           })}
         </div>
       ) : (
@@ -351,6 +359,10 @@ function renderRobotsTab({
   setExampleTitle,
   exampleDescription,
   setExampleDescription,
+  scriptFile,
+  setScriptFile,
+  scriptEntryScript,
+  setScriptEntryScript,
 }: {
   draft: Draft;
   selectedRobot: Robot | null;
@@ -366,6 +378,10 @@ function renderRobotsTab({
   setExampleTitle: React.Dispatch<React.SetStateAction<string>>;
   exampleDescription: string;
   setExampleDescription: React.Dispatch<React.SetStateAction<string>>;
+  scriptFile: File | null;
+  setScriptFile: React.Dispatch<React.SetStateAction<File | null>>;
+  scriptEntryScript: string;
+  setScriptEntryScript: React.Dispatch<React.SetStateAction<string>>;
 }) {
   return (
     <div className="grid gap-6">
@@ -464,6 +480,69 @@ function renderRobotsTab({
                 </select>
               </Field>
             </div>
+          </Section>
+
+          <Section
+            title="Script da automação"
+            description="Faça upload de um .zip com os scripts Python. O comando e a pasta de execução serão preenchidos automaticamente."
+          >
+            {draft.id ? (
+              <div className="grid gap-4 rounded-3xl border border-slate-200 p-5 dark:border-slate-800">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Arquivo .zip">
+                    <Input
+                      type="file"
+                      accept=".zip"
+                      onChange={(event) => setScriptFile(event.target.files?.[0] ?? null)}
+                    />
+                  </Field>
+                  <Field label="Script de entrada" hint="Ex: main.py ou src/run.py">
+                    <Input
+                      value={scriptEntryScript}
+                      placeholder="main.py"
+                      onChange={(event) => setScriptEntryScript(event.target.value)}
+                    />
+                  </Field>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      if (!draft.id) return;
+                      if (!scriptFile) {
+                        notify('Selecione um arquivo .zip para enviar.');
+                        return;
+                      }
+                      if (!scriptEntryScript.trim()) {
+                        notify('Informe o nome do script de entrada.');
+                        return;
+                      }
+                      try {
+                        const formData = new FormData();
+                        formData.append('file', scriptFile);
+                        formData.append('entryScript', scriptEntryScript.trim());
+                        const updated = await api<Robot>(`/robots/${draft.id}/scripts`, {
+                          method: 'POST',
+                          body: formData,
+                        });
+                        await refreshHub();
+                        setScriptFile(null);
+                        setScriptEntryScript('');
+                        notify(`Scripts enviados. Comando: ${updated.command}`);
+                      } catch (error) {
+                        notify(error instanceof Error ? error.message : 'Não foi possível enviar os scripts.');
+                      }
+                    }}
+                  >
+                    Enviar scripts
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Salve a automação primeiro para fazer upload dos scripts.
+              </p>
+            )}
           </Section>
 
           <Section

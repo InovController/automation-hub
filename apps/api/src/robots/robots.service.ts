@@ -3,6 +3,7 @@ import { Prisma, type User } from '@prisma/client';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
+import AdmZip from 'adm-zip';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   canAccessExecution,
@@ -12,9 +13,11 @@ import {
 import { toUserFileName, uniqueStoredFileName } from '../shared/files';
 import {
   ensureRobotExampleDirs,
+  ensureRobotScriptsDirs,
   executionRoot,
   robotExamplesDir,
   robotRoot,
+  robotScriptsDir,
 } from '../shared/storage';
 
 type UploadedFile = {
@@ -288,6 +291,44 @@ export class RobotsService {
 
     return this.prisma.robot.create({
       data: payload,
+    });
+  }
+
+  async uploadScript(robotId: string, entryScript: string, file?: UploadedFile) {
+    const robot = await this.prisma.robot.findUnique({
+      where: { id: robotId },
+      select: { id: true },
+    });
+
+    if (!robot) {
+      throw new BadRequestException('Automação não encontrada.');
+    }
+
+    if (!file?.buffer) {
+      throw new BadRequestException('Envie um arquivo .zip com os scripts da automação.');
+    }
+
+    const entry = entryScript?.trim();
+    if (!entry) {
+      throw new BadRequestException('Informe o nome do script de entrada (ex: main.py).');
+    }
+
+    const scriptsDir = robotScriptsDir(robot.id);
+    await ensureRobotScriptsDirs(robot.id);
+
+    // Clear previous scripts
+    await rm(scriptsDir, { recursive: true, force: true });
+    await ensureRobotScriptsDirs(robot.id);
+
+    const zip = new AdmZip(file.buffer);
+    zip.extractAllTo(scriptsDir, true);
+
+    const command = `python3 ${entry}`;
+    const workingDirectory = scriptsDir;
+
+    return this.prisma.robot.update({
+      where: { id: robot.id },
+      data: { command, workingDirectory },
     });
   }
 

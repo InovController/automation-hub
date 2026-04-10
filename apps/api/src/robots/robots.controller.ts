@@ -146,6 +146,24 @@ export class RobotsController {
     );
   }
 
+  @Post(':id/scripts')
+  @UseInterceptors(AnyFilesInterceptor())
+  async uploadScript(
+    @Param('id') id: string,
+    @Req() request: Request,
+    @Body() body: Record<string, unknown>,
+    @UploadedFiles() files: UploadedFile[] = [],
+  ) {
+    const user = await this.authService.requireUser(request);
+    this.authService.ensureAdmin(user);
+
+    return this.robotsService.uploadScript(
+      id,
+      typeof body.entryScript === 'string' ? body.entryScript : '',
+      files[0],
+    );
+  }
+
   @Delete(':id/examples/:exampleId')
   async deleteInputExample(
     @Param('id') id: string,
