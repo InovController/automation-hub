@@ -10,9 +10,9 @@ import {
   CalendarDays,
   Search,
   Settings,
-  Sparkles,
   Sun,
 } from 'lucide-react';
+import { ControllerLogo } from './controller-logo';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/auth-context';
@@ -76,7 +76,7 @@ export function AppShell() {
             <div className="flex items-center px-5 py-5">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white dark:bg-[#1f1f23] dark:text-white">
-                  <Sparkles className="h-5 w-5" />
+                  <ControllerLogo className="h-7 w-7" />
                 </div>
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold">Automation HUB</div>
@@ -141,7 +141,7 @@ export function AppShell() {
           >
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white dark:bg-[#1f1f23] dark:text-white">
-                <Sparkles className="h-5 w-5" />
+                <ControllerLogo className="h-7 w-7" />
               </div>
               {!sidebarCollapsed ? (
                 <div className="min-w-0">

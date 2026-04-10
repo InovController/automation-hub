@@ -1,4 +1,5 @@
-import { Activity, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react';
+import { Activity, LockKeyhole, ShieldCheck } from 'lucide-react';
+import { ControllerLogo } from '../components/controller-logo';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Field } from '../components/field';
@@ -38,14 +39,14 @@ export function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 px-4 py-6 dark:bg-[#09090b] sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 dark:bg-[#09090b] sm:px-6 lg:px-8">
       <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-7xl gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <Card className="order-2 hidden rounded-[32px] border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white shadow-none dark:border-[#1c2538] dark:from-slate-950 dark:via-slate-900 dark:to-slate-900 lg:block">
+        <Card className="order-2 hidden rounded-[32px] border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white shadow-none dark:border-[#3f3f46] dark:from-zinc-800 dark:via-zinc-900 dark:to-zinc-950 lg:block">
           <CardContent className="flex h-full flex-col justify-between gap-10 p-8 sm:p-10">
             <div className="space-y-8">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
-                  <Sparkles className="h-5 w-5" />
+                  <ControllerLogo className="h-8 w-8" />
                 </div>
                 <div>
                   <div className="text-lg font-semibold">Automation HUB</div>
@@ -63,7 +64,9 @@ export function AuthPage() {
                   Operação centralizada
                 </Badge>
                 <h1 className="max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
-                  Execute automações com histórico, logs reais e controle de fila.
+                  Execute automações com histórico,{' '}
+                  <span className="text-sky-400">logs reais</span> e{' '}
+                  <span className="text-sky-400">controle de fila</span>.
                 </h1>
                 <p className="max-w-2xl text-base text-slate-300">
                   Um portal único para disparar robôs, acompanhar conflitos de
@@ -92,11 +95,15 @@ export function AuthPage() {
           </CardContent>
         </Card>
 
-        <Card className="order-1 rounded-[28px] border-slate-300 bg-white dark:border-[#1c2538] dark:bg-[#070d1a] lg:rounded-[32px]">
+        <Card className="order-1 rounded-[28px] border-slate-300 bg-white dark:border-[#3f3f46] dark:bg-[#18181b] lg:rounded-[32px]">
           <CardHeader className="space-y-4 p-5 pb-0 sm:p-6 sm:pb-0">
             <div className="space-y-2">
               <CardTitle className="text-3xl">
-                {mode === 'login' ? 'Entrar na conta' : 'Criar conta'}
+                {mode === 'login' ? (
+                  <>Entrar na <span className="text-sky-500">conta</span></>
+                ) : (
+                  <>Criar <span className="text-sky-500">conta</span></>
+                )}
               </CardTitle>
               <CardDescription>
                 {mode === 'login'
@@ -105,13 +112,13 @@ export function AuthPage() {
               </CardDescription>
             </div>
 
-            <div className="flex rounded-2xl bg-slate-100 p-1 dark:bg-[#0d1424]">
+            <div className="flex rounded-2xl bg-slate-100 p-1 dark:bg-[#27272a]">
               <button
                 type="button"
                 className={[
                   'flex-1 rounded-xl px-4 py-2 text-sm font-medium transition',
                   mode === 'login'
-                    ? 'bg-white text-slate-950 shadow-sm dark:bg-[#1a2437] dark:text-white'
+                    ? 'bg-white text-slate-950 shadow-sm dark:bg-[#3f3f46] dark:text-white'
                     : 'text-slate-500 dark:text-slate-400',
                 ].join(' ')}
                 onClick={() => setMode('login')}
@@ -123,7 +130,7 @@ export function AuthPage() {
                 className={[
                   'flex-1 rounded-xl px-4 py-2 text-sm font-medium transition',
                   mode === 'register'
-                    ? 'bg-white text-slate-950 shadow-sm dark:bg-[#1a2437] dark:text-white'
+                    ? 'bg-white text-slate-950 shadow-sm dark:bg-[#3f3f46] dark:text-white'
                     : 'text-slate-500 dark:text-slate-400',
                 ].join(' ')}
                 onClick={() => setMode('register')}
@@ -181,8 +188,8 @@ export function AuthPage() {
                         className={[
                           'rounded-2xl border px-4 py-3 text-left text-sm transition',
                           active
-                            ? 'border-sky-400 bg-sky-50 text-slate-950 dark:border-sky-500/40 dark:bg-[#111a2a] dark:text-white'
-                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-[#25324a] dark:bg-[#070d1a] dark:text-slate-200 dark:hover:bg-[#0d1424]',
+                            ? 'border-sky-400 bg-sky-50 text-slate-950 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-white'
+                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-[#3f3f46] dark:bg-[#27272a] dark:text-slate-200 dark:hover:bg-[#3f3f46]',
                         ].join(' ')}
                         onClick={() =>
                           setForm((current) => ({
