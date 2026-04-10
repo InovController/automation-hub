@@ -493,6 +493,10 @@ function resolveWorkingDirectory(value: string) {
     return fileURLToPath(value);
   }
 
+  if (value.startsWith('/')) {
+    return value;
+  }
+
   return join(process.cwd(), value);
 }
 
