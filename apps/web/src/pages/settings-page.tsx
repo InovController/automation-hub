@@ -463,11 +463,29 @@ function renderRobotsTab({
                   }
                 />
               </Field>
-              <Field className="md:col-span-2" label="Comando de execução">
-                <Input value={draft.command} onChange={(e) => setDraft({ ...draft, command: e.target.value })} />
+              <Field
+                className="md:col-span-2"
+                label="Comando de execução"
+                hint={draft.workingDirectory?.includes('/scripts') ? 'Gerenciado pelo upload de scripts — edite via "Script da automação" abaixo.' : undefined}
+              >
+                <Input
+                  value={draft.command}
+                  readOnly={draft.workingDirectory?.includes('/scripts')}
+                  className={draft.workingDirectory?.includes('/scripts') ? 'cursor-not-allowed opacity-60' : ''}
+                  onChange={(e) => setDraft({ ...draft, command: e.target.value })}
+                />
               </Field>
-              <Field className="md:col-span-2" label="Pasta de execução">
-                <Input value={draft.workingDirectory} onChange={(e) => setDraft({ ...draft, workingDirectory: e.target.value })} />
+              <Field
+                className="md:col-span-2"
+                label="Pasta de execução"
+                hint={draft.workingDirectory?.includes('/scripts') ? 'Gerenciado pelo upload de scripts — edite via "Script da automação" abaixo.' : undefined}
+              >
+                <Input
+                  value={draft.workingDirectory}
+                  readOnly={draft.workingDirectory?.includes('/scripts')}
+                  className={draft.workingDirectory?.includes('/scripts') ? 'cursor-not-allowed opacity-60' : ''}
+                  onChange={(e) => setDraft({ ...draft, workingDirectory: e.target.value })}
+                />
               </Field>
               <Field label="Status">
                 <select
@@ -484,9 +502,18 @@ function renderRobotsTab({
 
           <Section
             title="Script da automação"
-            description="Faça upload de um .zip com os scripts Python. O comando e a pasta de execução serão preenchidos automaticamente."
+            description="Faça upload de um .zip com os scripts Python. O comando e a pasta de execução serão preenchidos automaticamente — não precisam ser editados à mão."
           >
-            {draft.id ? (
+            <div className="grid gap-4">
+              {!draft.id ? (
+                <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
+                  O .zip será enviado automaticamente ao clicar em "Salvar automação" abaixo.
+                </div>
+              ) : draft.workingDirectory?.includes('/scripts') ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                  Scripts ativos — envie um novo .zip para substituir.
+                </div>
+              ) : null}
               <div className="grid gap-4 rounded-3xl border border-slate-200 p-5 dark:border-slate-800">
                 <div className="grid gap-4 md:grid-cols-2">
                   <Field label="Arquivo .zip">
@@ -504,45 +531,43 @@ function renderRobotsTab({
                     />
                   </Field>
                 </div>
-                <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={async () => {
-                      if (!draft.id) return;
-                      if (!scriptFile) {
-                        notify('Selecione um arquivo .zip para enviar.');
-                        return;
-                      }
-                      if (!scriptEntryScript.trim()) {
-                        notify('Informe o nome do script de entrada.');
-                        return;
-                      }
-                      try {
-                        const formData = new FormData();
-                        formData.append('file', scriptFile);
-                        formData.append('entryScript', scriptEntryScript.trim());
-                        const updated = await api<Robot>(`/robots/${draft.id}/scripts`, {
-                          method: 'POST',
-                          body: formData,
-                        });
-                        await refreshHub();
-                        setScriptFile(null);
-                        setScriptEntryScript('');
-                        notify(`Scripts enviados. Comando: ${updated.command}`);
-                      } catch (error) {
-                        notify(error instanceof Error ? error.message : 'Não foi possível enviar os scripts.');
-                      }
-                    }}
-                  >
-                    Enviar scripts
-                  </Button>
-                </div>
+                {draft.id ? (
+                  <div className="flex justify-end">
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        if (!draft.id) return;
+                        if (!scriptFile) {
+                          notify('Selecione um arquivo .zip para enviar.');
+                          return;
+                        }
+                        if (!scriptEntryScript.trim()) {
+                          notify('Informe o nome do script de entrada.');
+                          return;
+                        }
+                        try {
+                          const formData = new FormData();
+                          formData.append('file', scriptFile);
+                          formData.append('entryScript', scriptEntryScript.trim());
+                          const updated = await api<Robot>(`/robots/${draft.id}/scripts`, {
+                            method: 'POST',
+                            body: formData,
+                          });
+                          await refreshHub();
+                          setScriptFile(null);
+                          setScriptEntryScript('');
+                          notify(`Scripts enviados. Comando: ${updated.command}`);
+                        } catch (error) {
+                          notify(error instanceof Error ? error.message : 'Não foi possível enviar os scripts.');
+                        }
+                      }}
+                    >
+                      Enviar scripts
+                    </Button>
+                  </div>
+                ) : null}
               </div>
-            ) : (
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Salve a automação primeiro para fazer upload dos scripts.
-              </p>
-            )}
+            </div>
           </Section>
 
           <Section
@@ -813,9 +838,26 @@ function renderRobotsTab({
                       schema: { fields: draft.fields, fileInputs: draft.fileInputs },
                     }),
                   });
+
+                  if (scriptFile && scriptEntryScript.trim()) {
+                    try {
+                      const formData = new FormData();
+                      formData.append('file', scriptFile);
+                      formData.append('entryScript', scriptEntryScript.trim());
+                      await api(`/robots/${saved.id}/scripts`, { method: 'POST', body: formData });
+                      setScriptFile(null);
+                      setScriptEntryScript('');
+                    } catch {
+                      notify('Automação salva, mas o upload dos scripts falhou. Tente novamente na seção "Script da automação".');
+                      await refreshHub();
+                      setSelectedRobotId(saved.id);
+                      return;
+                    }
+                  }
+
                   await refreshHub();
                   setSelectedRobotId(saved.id);
-                  notify('Automação salva com sucesso.');
+                  notify(scriptFile ? 'Automação salva e scripts enviados.' : 'Automação salva com sucesso.');
                 } catch (error) {
                   notify(error instanceof Error ? error.message : 'Não foi possível salvar a automação.');
                 }
