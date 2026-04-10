@@ -29,6 +29,9 @@ importers:
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
+      node-unrar-js:
+        specifier: ^2.0.2
+        version: 2.0.2
       pg:
         specifier: ^8.18.0
         version: 8.18.0
@@ -1516,6 +1519,10 @@ packages:
 
   node-releases@2.0.27:
     resolution: {integrity: sha512-nmh3lCkYZ3grZvqcCH+fjmQ7X+H0OeZgP40OierEaAptX4XofMh5kwNbWh7lBduUzCcV/8kZ+NDLCwm2iorIlA==}
+
+  node-unrar-js@2.0.2:
+    resolution: {integrity: sha512-hLNmoJzqaKJnod8yiTVGe9hnlNRHotUi0CreSv/8HtfRi/3JnRC8DvsmKfeGGguRjTEulhZK6zXX5PXoVuDZ2w==}
+    engines: {node: '>=10.0.0'}
 
   nypm@0.6.5:
     resolution: {integrity: sha512-K6AJy1GMVyfyMXRVB88700BJqNUkByijGJM8kEHpLdcAt+vSQAVfkWWHYzuRXHSY6xA2sNc5RjTj0p9rE2izVQ==}
@@ -3502,6 +3509,8 @@ snapshots:
   node-fetch-native@1.6.7: {}
 
   node-releases@2.0.27: {}
+
+  node-unrar-js@2.0.2: {}
 
   nypm@0.6.5:
     dependencies:

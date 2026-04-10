@@ -463,15 +463,7 @@ function renderRobotsTab({
                   }
                 />
               </Field>
-              {draft.workingDirectory?.includes('/scripts') ? (
-                <div className="md:col-span-2 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm dark:border-[#2b2b31] dark:bg-[#111113]">
-                  <span className="text-slate-500 dark:text-slate-400">Execução gerenciada por scripts</span>
-                  <span className="text-slate-300 dark:text-slate-600">·</span>
-                  <span className="font-mono text-slate-700 dark:text-slate-200">
-                    {draft.command?.replace('python3 ', '') ?? ''}
-                  </span>
-                </div>
-              ) : (
+              {!draft.workingDirectory?.includes('/scripts') ? (
                 <>
                   <Field className="md:col-span-2" label="Comando de execução">
                     <Input value={draft.command} onChange={(e) => setDraft({ ...draft, command: e.target.value })} />
@@ -480,7 +472,7 @@ function renderRobotsTab({
                     <Input value={draft.workingDirectory} onChange={(e) => setDraft({ ...draft, workingDirectory: e.target.value })} />
                   </Field>
                 </>
-              )}
+              ) : null}
               <Field label="Status">
                 <select
                   className="flex h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100 dark:border-[#2b2b31] dark:bg-[#0f0f10] dark:text-zinc-100 dark:focus:ring-sky-900/35"
@@ -496,69 +488,76 @@ function renderRobotsTab({
 
           <Section
             title="Script da automação"
-            description="Faça upload de um .zip com os scripts Python. O comando e a pasta de execução serão preenchidos automaticamente — não precisam ser editados à mão."
+            description="Suba um .zip ou .rar com todos os scripts Python. O hub configura o comando de execução automaticamente."
           >
-            <div className="grid gap-4">
-              {!draft.id ? (
-                <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
-                  O .zip será enviado automaticamente ao clicar em "Salvar automação" abaixo.
-                </div>
-              ) : draft.workingDirectory?.includes('/scripts') ? (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-                  Scripts ativos — envie um novo .zip para substituir.
+            <div className="grid gap-4 rounded-3xl border border-slate-200 p-5 dark:border-slate-800">
+              {draft.workingDirectory?.includes('/scripts') ? (
+                <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3 dark:bg-emerald-950/30">
+                  <div className="h-2 w-2 flex-shrink-0 rounded-full bg-emerald-500" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Scripts ativos</p>
+                    <p className="truncate font-mono text-xs text-emerald-600 dark:text-emerald-400">
+                      {draft.command?.replace('python3 ', '') ?? ''}
+                    </p>
+                  </div>
                 </div>
               ) : null}
-              <div className="grid gap-4 rounded-3xl border border-slate-200 p-5 dark:border-slate-800">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="Arquivo .zip">
-                    <Input
-                      type="file"
-                      accept=".zip"
-                      onChange={(event) => setScriptFile(event.target.files?.[0] ?? null)}
-                    />
-                  </Field>
-                  <Field label="Script de entrada" hint="Ex: main.py ou src/run.py">
-                    <Input
-                      value={scriptEntryScript}
-                      placeholder="main.py"
-                      onChange={(event) => setScriptEntryScript(event.target.value)}
-                    />
-                  </Field>
-                </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Arquivo (.zip ou .rar)">
+                  <Input
+                    type="file"
+                    accept=".zip,.rar"
+                    onChange={(event) => setScriptFile(event.target.files?.[0] ?? null)}
+                  />
+                </Field>
+                <Field label="Script principal" hint="Arquivo que inicia a automação, ex: main.py">
+                  <Input
+                    value={scriptEntryScript}
+                    placeholder="main.py"
+                    onChange={(event) => setScriptEntryScript(event.target.value)}
+                  />
+                </Field>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                {!draft.id ? (
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    O arquivo será enviado automaticamente ao salvar.
+                  </p>
+                ) : <span />}
                 {draft.id ? (
-                  <div className="flex justify-end">
-                    <Button
-                      variant="outline"
-                      onClick={async () => {
-                        if (!draft.id) return;
-                        if (!scriptFile) {
-                          notify('Selecione um arquivo .zip para enviar.');
-                          return;
-                        }
-                        if (!scriptEntryScript.trim()) {
-                          notify('Informe o nome do script de entrada.');
-                          return;
-                        }
-                        try {
-                          const formData = new FormData();
-                          formData.append('file', scriptFile);
-                          formData.append('entryScript', scriptEntryScript.trim());
-                          const updated = await api<Robot>(`/robots/${draft.id}/scripts`, {
-                            method: 'POST',
-                            body: formData,
-                          });
-                          await refreshHub();
-                          setScriptFile(null);
-                          setScriptEntryScript('');
-                          notify(`Scripts enviados. Comando: ${updated.command}`);
-                        } catch (error) {
-                          notify(error instanceof Error ? error.message : 'Não foi possível enviar os scripts.');
-                        }
-                      }}
-                    >
-                      Enviar scripts
-                    </Button>
-                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      if (!draft.id) return;
+                      if (!scriptFile) {
+                        notify('Selecione um arquivo .zip ou .rar para enviar.');
+                        return;
+                      }
+                      if (!scriptEntryScript.trim()) {
+                        notify('Informe o script principal (ex: main.py).');
+                        return;
+                      }
+                      try {
+                        const formData = new FormData();
+                        formData.append('file', scriptFile);
+                        formData.append('entryScript', scriptEntryScript.trim());
+                        await api<Robot>(`/robots/${draft.id}/scripts`, {
+                          method: 'POST',
+                          body: formData,
+                        });
+                        await refreshHub();
+                        setScriptFile(null);
+                        setScriptEntryScript('');
+                        notify('Scripts enviados com sucesso.');
+                      } catch (error) {
+                        notify(error instanceof Error ? error.message : 'Não foi possível enviar os scripts.');
+                      }
+                    }}
+                  >
+                    {draft.workingDirectory?.includes('/scripts') ? 'Substituir scripts' : 'Enviar scripts'}
+                  </Button>
                 ) : null}
               </div>
             </div>

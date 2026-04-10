@@ -1,9 +1,9 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { Prisma, type User } from '@prisma/client';
-import { rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import AdmZip from 'adm-zip';
+import { createExtractorFromData } from 'node-unrar-js';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   canAccessExecution,
@@ -320,8 +320,26 @@ export class RobotsService {
     await rm(scriptsDir, { recursive: true, force: true });
     await ensureRobotScriptsDirs(robot.id);
 
-    const zip = new AdmZip(file.buffer);
-    zip.extractAllTo(scriptsDir, true);
+    const originalName = (file.originalname ?? '').toLowerCase();
+
+    if (originalName.endsWith('.rar')) {
+      const arrayBuffer = file.buffer.buffer.slice(
+        file.buffer.byteOffset,
+        file.buffer.byteOffset + file.buffer.byteLength,
+      ) as ArrayBuffer;
+      const extractor = await createExtractorFromData({ data: arrayBuffer });
+      const extracted = extractor.extract();
+      for (const entry of extracted.files) {
+        if (entry.fileHeader.flags.directory) continue;
+        if (!entry.extraction) continue;
+        const outPath = join(scriptsDir, entry.fileHeader.name);
+        await mkdir(dirname(outPath), { recursive: true });
+        await writeFile(outPath, Buffer.from(entry.extraction));
+      }
+    } else {
+      const zip = new AdmZip(file.buffer);
+      zip.extractAllTo(scriptsDir, true);
+    }
 
     const command = `python3 ${entry}`;
     const workingDirectory = scriptsDir;
