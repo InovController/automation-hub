@@ -200,3 +200,45 @@ Para adicionar um novo robô:
 6. Retornar exit code `0` para sucesso, qualquer outro para erro
 
 Veja o exemplo em `integrations/bot-sintegra-ce/` para referência Python.
+
+## Infraestrutura e Deploy
+
+### Repositório GitHub
+- **URL:** https://github.com/InovController/automation-hub
+- **Organização:** InovController (conta da Controller-RNC)
+- **Visibilidade:** público
+- **Branch principal:** `master`
+
+### Autenticação GitHub
+- Autenticado via **GitHub CLI (`gh`)** com a conta `InovController`
+- Para verificar: `gh auth status`
+- Para listar repos: `gh repo list`
+
+### Git — situação importante
+O repositório git local foi inicializado **dentro da pasta `automation-hub/`** (não na raiz do disco).
+- Caminho correto do `.git`: `automation-hub/.git`
+- Anteriormente havia um `.git` aninhado em `apps/api/` que foi removido
+- O `.gitignore` exclui: `node_modules/`, `.env`, `dist/`, `apps/api/data/`, `.claude/`, `tmp/`, `logs/`
+
+### Deploy — Railway
+- Plataforma alvo: **Railway** (railway.app)
+- Arquivo de configuração: `railway.json` na raiz do projeto
+- Build: `cd apps/web && npm install && npm run build && cd ../api && npm install && npm run build && npx prisma generate`
+- Start: `cd apps/api && node dist/main`
+- **Status atual (2026-04-10):** configuração criada, push para o GitHub ainda pendente de conclusão
+
+#### Passos para concluir o deploy no Railway
+1. Fazer o push do código: `git push -u origin master`
+2. Acessar railway.app → New Project → Deploy from GitHub → InovController/automation-hub
+3. Adicionar serviço PostgreSQL (gerenciado pelo Railway, sem Docker)
+4. Configurar variáveis de ambiente no serviço:
+   - `DATABASE_URL` → Railway preenche automaticamente ao linkar o PostgreSQL
+   - `RUNNER_MAX_CONCURRENCY=2`
+   - `RUNNER_MEMORY_THRESHOLD_PERCENT=90`
+   - `ALLOWED_ORIGIN=https://<url-gerada>.railway.app`
+5. Rodar as migrações após o primeiro deploy: `npx prisma migrate deploy`
+
+#### Banco de dados em produção
+- Localmente usa Docker Compose com PostgreSQL na porta `5433`
+- Em produção no Railway usa o PostgreSQL **gerenciado pelo Railway** (não Docker)
+- A `DATABASE_URL` muda entre dev e prod — nunca commitar o `.env` real
