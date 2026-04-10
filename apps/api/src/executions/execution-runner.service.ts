@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { writeFile } from 'node:fs/promises';
+import { access, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { join, relative } from 'node:path';
@@ -14,6 +14,8 @@ import {
   inputDir,
   metadataDir,
   outputDir,
+  robotPipDir,
+  robotsRoot,
   storageRoot,
 } from '../shared/storage';
 
@@ -199,6 +201,7 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
         execution.id,
         execution.robot.command,
         execution.robot.workingDirectory,
+        execution.robot.id,
       );
       if (this.stoppedExecutions.has(execution.id)) {
         return;
@@ -242,16 +245,25 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
     executionId: string,
     command: string,
     workingDirectory?: string | null,
+    robotId?: string,
   ) {
     await this.executionsService.log(executionId, 'info', `Iniciando comando: ${command}`);
     await this.executionsService.updateProgress(executionId, 25, 'Executando automacao');
 
     const cwd = workingDirectory ? resolveWorkingDirectory(workingDirectory) : process.cwd();
+
+    const pipDir = robotId ? robotPipDir(robotId) : null;
+    const hasPip = pipDir ? await access(pipDir).then(() => true).catch(() => false) : false;
+    const pythonPath = hasPip
+      ? [pipDir, process.env.PYTHONPATH].filter(Boolean).join(':')
+      : process.env.PYTHONPATH;
+
     const child = spawn(command, {
       cwd,
       shell: true,
       env: {
         ...process.env,
+        ...(pythonPath ? { PYTHONPATH: pythonPath } : {}),
         AUTOMATION_EXECUTION_ID: executionId,
         AUTOMATION_INPUT_DIR: inputDir(executionId),
         AUTOMATION_OUTPUT_DIR: outputDir(executionId),

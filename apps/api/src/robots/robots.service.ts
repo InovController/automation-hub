@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { Prisma, type User } from '@prisma/client';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, rm, writeFile } from 'node:fs/promises';
+import { execSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import AdmZip from 'adm-zip';
 import { createExtractorFromData } from 'node-unrar-js';
@@ -13,9 +14,11 @@ import {
 import { toUserFileName, uniqueStoredFileName } from '../shared/files';
 import {
   ensureRobotExampleDirs,
+  ensureRobotPipDir,
   ensureRobotScriptsDirs,
   executionRoot,
   robotExamplesDir,
+  robotPipDir,
   robotRoot,
   robotScriptsDir,
 } from '../shared/storage';
@@ -339,6 +342,15 @@ export class RobotsService {
     } else {
       const zip = new AdmZip(file.buffer);
       zip.extractAllTo(scriptsDir, true);
+    }
+
+    const requirementsTxt = join(scriptsDir, 'requirements.txt');
+    const hasRequirements = await access(requirementsTxt).then(() => true).catch(() => false);
+
+    if (hasRequirements) {
+      const pipDir = robotPipDir(robot.id);
+      await ensureRobotPipDir(robot.id);
+      execSync(`pip3 install --target="${pipDir}" -r "${requirementsTxt}"`, { stdio: 'inherit' });
     }
 
     const command = `python3 ${entry}`;

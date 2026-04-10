@@ -58,10 +58,18 @@ export function robotScriptsDir(robotId: string) {
   return join(robotRoot(robotId), 'scripts');
 }
 
+export function robotPipDir(robotId: string) {
+  return join(robotRoot(robotId), 'pip');
+}
+
 export async function ensureRobotExampleDirs(robotId: string) {
   await mkdir(robotExamplesDir(robotId), { recursive: true });
 }
 
 export async function ensureRobotScriptsDirs(robotId: string) {
   await mkdir(robotScriptsDir(robotId), { recursive: true });
+}
+
+export async function ensureRobotPipDir(robotId: string) {
+  await mkdir(robotPipDir(robotId), { recursive: true });
 }
