@@ -10,5 +10,8 @@ RUN cd apps/api && npm install && npx prisma generate && npm run build && ls -la
 
 EXPOSE 3000
 
+COPY apps/api/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 WORKDIR /app/apps/api
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main"]
+CMD ["/entrypoint.sh"]
