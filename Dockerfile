@@ -11,4 +11,4 @@ RUN cd apps/api && npm install && npx prisma generate && npm run build && ls -la
 EXPOSE 3000
 
 WORKDIR /app/apps/api
-CMD ["node", "dist/src/main"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main"]
