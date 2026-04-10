@@ -463,30 +463,24 @@ function renderRobotsTab({
                   }
                 />
               </Field>
-              <Field
-                className="md:col-span-2"
-                label="Comando de execução"
-                hint={draft.workingDirectory?.includes('/scripts') ? 'Gerenciado pelo upload de scripts — edite via "Script da automação" abaixo.' : undefined}
-              >
-                <Input
-                  value={draft.command}
-                  readOnly={draft.workingDirectory?.includes('/scripts')}
-                  className={draft.workingDirectory?.includes('/scripts') ? 'cursor-not-allowed opacity-60' : ''}
-                  onChange={(e) => setDraft({ ...draft, command: e.target.value })}
-                />
-              </Field>
-              <Field
-                className="md:col-span-2"
-                label="Pasta de execução"
-                hint={draft.workingDirectory?.includes('/scripts') ? 'Gerenciado pelo upload de scripts — edite via "Script da automação" abaixo.' : undefined}
-              >
-                <Input
-                  value={draft.workingDirectory}
-                  readOnly={draft.workingDirectory?.includes('/scripts')}
-                  className={draft.workingDirectory?.includes('/scripts') ? 'cursor-not-allowed opacity-60' : ''}
-                  onChange={(e) => setDraft({ ...draft, workingDirectory: e.target.value })}
-                />
-              </Field>
+              {draft.workingDirectory?.includes('/scripts') ? (
+                <div className="md:col-span-2 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm dark:border-[#2b2b31] dark:bg-[#111113]">
+                  <span className="text-slate-500 dark:text-slate-400">Execução gerenciada por scripts</span>
+                  <span className="text-slate-300 dark:text-slate-600">·</span>
+                  <span className="font-mono text-slate-700 dark:text-slate-200">
+                    {draft.command?.replace('python3 ', '') ?? ''}
+                  </span>
+                </div>
+              ) : (
+                <>
+                  <Field className="md:col-span-2" label="Comando de execução">
+                    <Input value={draft.command} onChange={(e) => setDraft({ ...draft, command: e.target.value })} />
+                  </Field>
+                  <Field className="md:col-span-2" label="Pasta de execução">
+                    <Input value={draft.workingDirectory} onChange={(e) => setDraft({ ...draft, workingDirectory: e.target.value })} />
+                  </Field>
+                </>
+              )}
               <Field label="Status">
                 <select
                   className="flex h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100 dark:border-[#2b2b31] dark:bg-[#0f0f10] dark:text-zinc-100 dark:focus:ring-sky-900/35"
