@@ -4,6 +4,7 @@
     "builder": "DOCKERFILE"
   },
   "deploy": {
+    "startCommand": "node /app/apps/api/dist/main",
     "healthcheckPath": "/api/auth/me",
     "restartPolicyType": "ON_FAILURE"
   }

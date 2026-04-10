@@ -6,7 +6,7 @@ COPY . .
 
 RUN cd apps/web && npm install && npm run build
 
-RUN cd apps/api && npm install && npx prisma generate && npm run build
+RUN cd apps/api && npm install && npx prisma generate && npm run build && ls -la /app/apps/api/dist/
 
 EXPOSE 3000
 
