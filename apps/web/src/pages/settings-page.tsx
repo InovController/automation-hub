@@ -1,5 +1,5 @@
 import { Plus, Trash2, Users } from 'lucide-react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Field } from '../components/field';
 import { PageHeader, PageHeaderBadge } from '../components/page-header';
 import { Badge } from '../components/ui/badge';
@@ -76,10 +76,13 @@ export function SettingsPage() {
     }
   }, [isCreatingNew, robots, selectedRobotId]);
 
+  const robotsRef = useRef(robots);
+  robotsRef.current = robots;
   useEffect(() => {
-    const robot = robots.find((item) => item.id === selectedRobotId);
+    const robot = robotsRef.current.find((item) => item.id === selectedRobotId);
     setDraft(robot ? mapRobotToDraft(robot) : emptyDraft());
-  }, [robots, selectedRobotId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRobotId]);
 
   useEffect(() => {
     setExampleFile(null);

@@ -37,18 +37,12 @@ export function SchedulesPage() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [templateFiles, setTemplateFiles] = useState<Record<string, File[]>>({});
-  const [nowTick, setNowTick] = useState(() => Date.now());
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   const robots = useMemo(() => hub?.robots ?? [], [hub?.robots]);
   const selectedRobot = robots.find((robot) => robot.id === draft.robotId) ?? null;
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowTick(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     void loadTasks();
@@ -171,9 +165,7 @@ export function SchedulesPage() {
                 <span className="text-xs text-slate-500 dark:text-slate-400">
                   Próxima execução: {formatDate(task.nextRunAt)}
                 </span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {countdownLabel(task, nowTick)}
-                </span>
+                <CountdownLabel task={task} />
               </button>
             ))}
           </CardContent>
@@ -587,6 +579,19 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <span className="text-sm text-slate-500 dark:text-slate-400">{label}</span>
       <span className="max-w-[70%] text-right text-sm font-medium leading-relaxed">{value}</span>
     </div>
+  );
+}
+
+function CountdownLabel({ task }: { task: ScheduledTask }) {
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <span className="text-xs text-slate-500 dark:text-slate-400">
+      {countdownLabel(task, nowTick)}
+    </span>
   );
 }
 
