@@ -134,6 +134,8 @@ export type Execution = {
   logs: ExecutionLog[];
 };
 
+export type RecipientScope = 'all' | 'departments' | 'specific';
+
 export type ScheduledTask = {
   id: string;
   name: string;
@@ -154,6 +156,9 @@ export type ScheduledTask = {
   timezone: string;
   notes?: string | null;
   parameters?: Record<string, unknown> | null;
+  recipientScope: RecipientScope;
+  recipientDepartments: Department[];
+  recipientUserIds: string[];
   isActive: boolean;
   lastRunAt?: string | null;
   nextRunAt: string;
@@ -164,6 +169,31 @@ export type ScheduledTask = {
   updatedAt: string;
   templateFiles?: string[];
   hasTemplateFiles?: boolean;
+};
+
+export type NotificationExecFile = {
+  id: string;
+  downloadName?: string | null;
+  storagePath: string;
+  downloadUrl: string;
+  mimeType?: string | null;
+  size?: number | null;
+};
+
+export type Notification = {
+  id: string;
+  type: string;
+  title: string;
+  body?: string | null;
+  executionId?: string | null;
+  isRead: boolean;
+  createdAt: string;
+  execution?: {
+    id: string;
+    status: string;
+    robot: { name: string };
+    files: NotificationExecFile[];
+  } | null;
 };
 
 export type HubOverview = {

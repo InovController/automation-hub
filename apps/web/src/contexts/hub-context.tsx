@@ -2,7 +2,9 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from 'react';
@@ -18,6 +20,8 @@ type HubContextValue = {
   notify: (message: string) => void;
   clearToast: () => void;
   refreshHub: () => Promise<void>;
+  unreadNotifications: number;
+  refreshUnreadCount: () => Promise<void>;
 };
 
 const HubContext = createContext<HubContextValue | null>(null);
@@ -27,6 +31,25 @@ export function HubProvider({ children }: PropsWithChildren) {
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState<string | null>(null);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const refreshUnreadCount = useCallback(async () => {
+    try {
+      const data = await api<{ count: number }>('/notifications/unread-count');
+      setUnreadNotifications(data.count);
+    } catch {
+      // silent
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshUnreadCount();
+    pollRef.current = setInterval(() => void refreshUnreadCount(), 30_000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [refreshUnreadCount]);
 
   const refreshHub = useCallback(async () => {
     const [hubData, executionsData] = await Promise.all([
@@ -42,8 +65,8 @@ export function HubProvider({ children }: PropsWithChildren) {
   const clearToast = useCallback(() => setToast(null), []);
 
   const value = useMemo(
-    () => ({ hub, executions, search, setSearch, toast, notify, clearToast, refreshHub }),
-    [clearToast, executions, hub, notify, refreshHub, search, toast],
+    () => ({ hub, executions, search, setSearch, toast, notify, clearToast, refreshHub, unreadNotifications, refreshUnreadCount }),
+    [clearToast, executions, hub, notify, refreshHub, search, toast, unreadNotifications, refreshUnreadCount],
   );
 
   return <HubContext.Provider value={value}>{children}</HubContext.Provider>;

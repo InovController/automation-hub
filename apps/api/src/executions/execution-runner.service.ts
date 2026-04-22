@@ -6,6 +6,7 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ExecutionStatus } from '@prisma/client';
 import { ExecutionsService } from './executions.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { listFilesRecursively, sanitizeFileName, toUserFileName } from '../shared/files';
 import {
   ensureExecutionDirs,
@@ -32,7 +33,10 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
   private isProcessingQueue = false;
 
-  constructor(private readonly executionsService: ExecutionsService) {}
+  constructor(
+    private readonly executionsService: ExecutionsService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async onModuleInit() {
     await ensureStorageRoot();
@@ -226,6 +230,7 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
       );
 
       await this.executionsService.log(execution.id, 'info', 'Execucao finalizada com sucesso.');
+      await this.maybeNotify(execution.id, execution.robot.name, 'success');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Falha inesperada durante a execucao';
       const current = await this.executionsService.getExecution(execution.id);
@@ -233,11 +238,28 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
       if (current.status !== ExecutionStatus.canceled) {
         await this.executionsService.markAsError(execution.id, message);
         await this.executionsService.log(execution.id, 'error', message);
+        await this.maybeNotify(execution.id, execution.robot.name, 'error');
       }
     } finally {
       this.runningProcesses.delete(execution.id);
       this.stoppedExecutions.delete(execution.id);
       void this.processQueue();
+    }
+  }
+
+  private async maybeNotify(executionId: string, robotName: string, status: 'success' | 'error') {
+    try {
+      const execution = await this.executionsService.getScheduledTaskId(executionId);
+      if (execution?.scheduledTaskId) {
+        await this.notificationsService.createForScheduledTaskExecution(
+          executionId,
+          execution.scheduledTaskId,
+          status,
+          robotName,
+        );
+      }
+    } catch (error) {
+      this.logger.warn('Failed to create notifications for execution', error);
     }
   }
 
