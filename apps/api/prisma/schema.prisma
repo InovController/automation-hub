@@ -21,6 +21,12 @@ enum ScheduleFrequency {
   monthly
 }
 
+enum RecipientScope {
+  all
+  departments
+  specific
+}
+
 enum UserRole {
   admin
   manager
@@ -83,9 +89,10 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  sessions   Session[]
-  executions Execution[]
+  sessions       Session[]
+  executions     Execution[]
   scheduledTasks ScheduledTask[]
+  notifications  Notification[]
 }
 
 model Session {
@@ -122,12 +129,15 @@ model Execution {
   finishedAt       DateTime?
   canceledAt       DateTime?
 
-  logs  ExecutionLog[]
-  files ExecutionFile[]
+  scheduledTaskId  String?
+  logs             ExecutionLog[]
+  files            ExecutionFile[]
+  notifications    Notification[]
 
   @@index([robotId])
   @@index([userId, createdAt])
   @@index([status, createdAt])
+  @@index([scheduledTaskId])
 }
 
 model ExecutionLog {
@@ -172,17 +182,36 @@ model ScheduledTask {
   timezone      String            @default("America/Sao_Paulo")
   notes         String?
   parameters    Json?
-  isActive      Boolean           @default(true)
-  lastRunAt     DateTime?
-  nextRunAt     DateTime
-  lastError     String?
-  lastExecutionId String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  recipientScope       RecipientScope    @default(specific)
+  recipientDepartments Department[]      @default([])
+  recipientUserIds     String[]          @default([])
+  isActive             Boolean           @default(true)
+  lastRunAt            DateTime?
+  nextRunAt            DateTime
+  lastError            String?
+  lastExecutionId      String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 
   @@index([isActive, nextRunAt])
   @@index([userId, createdAt])
   @@index([robotId, createdAt])
+}
+
+model Notification {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id])
+  executionId String?
+  execution   Execution? @relation(fields: [executionId], references: [id])
+  type        String     @default("execution_result")
+  title       String
+  body        String?
+  isRead      Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+
+  @@index([userId, isRead, createdAt])
+  @@index([executionId])
 }
 
 model RobotInputExample {

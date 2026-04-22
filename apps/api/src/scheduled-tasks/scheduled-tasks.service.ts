@@ -6,9 +6,9 @@ import {
 } from '@nestjs/common';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Prisma, ScheduleFrequency, type ScheduledTask, type User } from '@prisma/client';
+import { Department, Prisma, RecipientScope, ScheduleFrequency, type ScheduledTask, type User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { canAccessRobot, isAdmin, isManager } from '../shared/access';
+import { canAccessRobot, isAdmin, isManager, COMPANY_DEPARTMENTS } from '../shared/access';
 import { ExecutionsService } from '../executions/executions.service';
 import { listFilesRecursively, sanitizeFileName, uniqueStoredFileName } from '../shared/files';
 import { ensureScheduleDirs, scheduleInputDir, scheduleRoot } from '../shared/storage';
@@ -26,6 +26,9 @@ type SaveTaskInput = {
   notes?: string;
   parameters?: Record<string, unknown>;
   isActive?: boolean;
+  recipientScope?: string;
+  recipientDepartments?: string[];
+  recipientUserIds?: string[];
 };
 
 type UploadedFile = {
@@ -129,6 +132,9 @@ export class ScheduledTasksService {
       dayOfMonth: input.dayOfMonth ?? null,
     });
 
+    const { recipientScope, recipientDepartments, recipientUserIds } =
+      parseRecipients(user, input);
+
     const payload: Prisma.ScheduledTaskUncheckedCreateInput = {
       name,
       robotId,
@@ -145,6 +151,9 @@ export class ScheduledTasksService {
       isActive: input.isActive ?? true,
       nextRunAt,
       timezone: 'America/Sao_Paulo',
+      recipientScope,
+      recipientDepartments,
+      recipientUserIds,
     };
 
     if (input.id) {
@@ -283,6 +292,7 @@ export class ScheduledTasksService {
           notes: task.notes ?? undefined,
           priority: 0,
           parameters: (task.parameters as Record<string, unknown>) ?? {},
+          scheduledTaskId: task.id,
         },
         templateFiles,
       );
@@ -448,6 +458,30 @@ function parseStartDate(value?: string) {
   }
 
   return parsed;
+}
+
+function parseRecipients(user: User, input: SaveTaskInput) {
+  if (!isAdmin(user)) {
+    return {
+      recipientScope: RecipientScope.specific,
+      recipientDepartments: [] as Department[],
+      recipientUserIds: [] as string[],
+    };
+  }
+
+  const scope = Object.values(RecipientScope).includes(input.recipientScope as RecipientScope)
+    ? (input.recipientScope as RecipientScope)
+    : RecipientScope.specific;
+
+  const recipientDepartments = (input.recipientDepartments ?? []).filter(
+    (d): d is Department => COMPANY_DEPARTMENTS.includes(d as Department),
+  );
+
+  const recipientUserIds = Array.isArray(input.recipientUserIds)
+    ? input.recipientUserIds.filter((id): id is string => typeof id === 'string' && id.length > 0)
+    : [];
+
+  return { recipientScope: scope, recipientDepartments, recipientUserIds };
 }
 
 function validateScheduleDateAndTime(startDate: Date | null, timeOfDay: string) {

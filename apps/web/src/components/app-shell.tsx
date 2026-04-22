@@ -2,6 +2,7 @@ import {
   Bell,
   BarChart3,
   ChevronsUpDown,
+  Download,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -14,7 +15,7 @@ import {
 } from 'lucide-react';
 import { ControllerLogo } from './controller-logo';
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/auth-context';
 import { useHub } from '../contexts/hub-context';
 import { useTheme } from '../contexts/theme-context';
@@ -27,9 +28,10 @@ import { Separator } from './ui/separator';
 
 export function AppShell() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { search, setSearch } = useHub();
+  const { search, setSearch, unreadNotifications, refreshUnreadCount } = useHub();
   const [profileOpen, setProfileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -46,6 +48,7 @@ export function AppShell() {
         { to: '/', label: 'Dashboard', icon: LayoutDashboard },
         { to: '/robots', label: 'Robôs', icon: PlayCircle },
         { to: '/history', label: 'Histórico', icon: Bell },
+        { to: '/results', label: 'Resultados', icon: Download },
         { to: '/time-savings', label: 'Tempo ganho', icon: BarChart3 },
         { to: '/schedules', label: 'Agendamentos', icon: CalendarDays },
       ],
@@ -283,6 +286,23 @@ export function AppShell() {
                   />
                 </div>
               </div>
+
+              <button
+                type="button"
+                className="relative h-10 w-10 rounded-xl border border-slate-200 bg-white p-0 text-slate-700 transition hover:bg-slate-100 dark:border-[#2b2b31] dark:bg-[#111113] dark:text-zinc-200 dark:hover:bg-[#18181b] dark:hover:text-white flex items-center justify-center"
+                title="Notificações"
+                onClick={() => {
+                  void refreshUnreadCount();
+                  void navigate('/notifications');
+                }}
+              >
+                <Bell className="h-4 w-4" />
+                {unreadNotifications > 0 ? (
+                  <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-sky-500 text-[10px] font-bold text-white">
+                    {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                  </span>
+                ) : null}
+              </button>
 
               <Button
                 variant="ghost"

@@ -1,4 +1,4 @@
-import { Trash2, Upload } from 'lucide-react';
+import { Trash2, Upload, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Field } from '../components/field';
@@ -13,8 +13,9 @@ import { useAuth } from '../contexts/auth-context';
 import { useHub } from '../contexts/hub-context';
 import { WEEKDAY_OPTIONS } from '../lib/constants';
 import { api } from '../lib/api';
-import type { RobotSchemaField, ScheduledTask } from '../lib/types';
+import type { Department, ManagedUser, RobotSchemaField, ScheduledTask } from '../lib/types';
 import { departmentLabel, formatDate } from '../lib/utils';
+import { DEPARTMENT_OPTIONS } from '../lib/constants';
 
 type Draft = {
   id?: string;
@@ -28,6 +29,9 @@ type Draft = {
   notes: string;
   isActive: boolean;
   parameters: Record<string, string | boolean>;
+  recipientScope: 'none' | 'all' | 'departments' | 'specific';
+  recipientDepartments: Department[];
+  recipientUserIds: string[];
 };
 
 export function SchedulesPage() {
@@ -39,6 +43,7 @@ export function SchedulesPage() {
   const [templateFiles, setTemplateFiles] = useState<Record<string, File[]>>({});
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [allUsers, setAllUsers] = useState<ManagedUser[]>([]);
 
   const robots = useMemo(() => hub?.robots ?? [], [hub?.robots]);
   const selectedRobot = robots.find((robot) => robot.id === draft.robotId) ?? null;
@@ -46,7 +51,10 @@ export function SchedulesPage() {
 
   useEffect(() => {
     void loadTasks();
-  }, []);
+    if (user?.role === 'admin') {
+      void api<ManagedUser[]>('/users').then(setAllUsers).catch(() => {});
+    }
+  }, [user?.role]);
 
   useEffect(() => {
     if (!selectedTaskId && tasks[0] && !isCreatingNew) {
@@ -64,6 +72,7 @@ export function SchedulesPage() {
       return;
     }
 
+    const scope = selectedTask.recipientScope ?? 'specific';
     setDraft({
       id: selectedTask.id,
       name: selectedTask.name,
@@ -82,6 +91,9 @@ export function SchedulesPage() {
       notes: selectedTask.notes ?? '',
       isActive: selectedTask.isActive,
       parameters: normalizeParameters(selectedTask.parameters ?? {}),
+      recipientScope: scope === 'specific' && (selectedTask.recipientUserIds ?? []).length === 0 ? 'none' : scope as Draft['recipientScope'],
+      recipientDepartments: (selectedTask.recipientDepartments ?? []) as Department[],
+      recipientUserIds: selectedTask.recipientUserIds ?? [],
     });
     setTemplateFiles({});
   }, [selectedTask, robots]);
@@ -350,6 +362,107 @@ export function SchedulesPage() {
                 </div>
               ) : null}
 
+              {user?.role === 'admin' ? (
+                <>
+                  <Separator />
+                  <div className="grid gap-4">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                      <h3 className="text-lg font-semibold">Destinatários do resultado</h3>
+                    </div>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      Quem receberá notificação com os arquivos gerados a cada execução.
+                    </p>
+                    <Field label="Escopo">
+                      <select
+                        className="flex h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100 dark:border-[#2b2b31] dark:bg-[#0f0f10] dark:text-zinc-100 dark:focus:ring-sky-900/35"
+                        value={draft.recipientScope}
+                        onChange={(e) =>
+                          setDraft({ ...draft, recipientScope: e.target.value as Draft['recipientScope'], recipientDepartments: [], recipientUserIds: [] })
+                        }
+                      >
+                        <option value="none">Somente o criador (sem notificações)</option>
+                        <option value="all">Todos os usuários ativos</option>
+                        <option value="departments">Por departamento</option>
+                        <option value="specific">Usuários específicos</option>
+                      </select>
+                    </Field>
+
+                    {draft.recipientScope === 'departments' ? (
+                      <div className="grid gap-2">
+                        <p className="text-sm font-medium">Selecione os departamentos</p>
+                        <div className="flex flex-wrap gap-2">
+                          {DEPARTMENT_OPTIONS.map((dept) => {
+                            const checked = draft.recipientDepartments.includes(dept.value as Department);
+                            return (
+                              <label
+                                key={dept.value}
+                                className={[
+                                  'flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition',
+                                  checked
+                                    ? 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-700 dark:bg-sky-950 dark:text-sky-300'
+                                    : 'border-slate-200 bg-white text-slate-700 dark:border-[#2b2b31] dark:bg-[#111113] dark:text-zinc-300',
+                                ].join(' ')}
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="sr-only"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    const val = dept.value as Department;
+                                    setDraft((cur) => ({
+                                      ...cur,
+                                      recipientDepartments: e.target.checked
+                                        ? [...cur.recipientDepartments, val]
+                                        : cur.recipientDepartments.filter((d) => d !== val),
+                                    }));
+                                  }}
+                                />
+                                {dept.label}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {draft.recipientScope === 'specific' ? (
+                      <div className="grid gap-2">
+                        <p className="text-sm font-medium">Selecione os usuários</p>
+                        <div className="max-h-48 overflow-y-auto rounded-2xl border border-slate-200 dark:border-[#2b2b31]">
+                          {allUsers.filter((u) => u.isActive).map((u) => {
+                            const checked = draft.recipientUserIds.includes(u.id);
+                            return (
+                              <label
+                                key={u.id}
+                                className="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-3 last:border-0 hover:bg-slate-50 dark:border-[#2b2b31] dark:hover:bg-[#18181b]"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    setDraft((cur) => ({
+                                      ...cur,
+                                      recipientUserIds: e.target.checked
+                                        ? [...cur.recipientUserIds, u.id]
+                                        : cur.recipientUserIds.filter((id) => id !== u.id),
+                                    }));
+                                  }}
+                                />
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium">{u.name}</div>
+                                  <div className="truncate text-xs text-slate-400">{u.email}</div>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+
               <div className="flex flex-wrap justify-between gap-3">
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -439,6 +552,17 @@ export function SchedulesPage() {
                         formData.append('notes', draft.notes);
                         formData.append('isActive', String(draft.isActive));
                         formData.append('parameters', JSON.stringify(draft.parameters));
+
+                        if (user?.role === 'admin') {
+                          const apiScope = draft.recipientScope === 'none' ? 'specific' : draft.recipientScope;
+                          formData.append('recipientScope', apiScope);
+                          formData.append('recipientDepartments', JSON.stringify(
+                            draft.recipientScope === 'departments' ? draft.recipientDepartments : [],
+                          ));
+                          formData.append('recipientUserIds', JSON.stringify(
+                            draft.recipientScope === 'specific' ? draft.recipientUserIds : [],
+                          ));
+                        }
 
                         Object.values(templateFiles).forEach((files) => {
                           files.forEach((file) => formData.append('templateFiles', file));
@@ -611,6 +735,9 @@ function emptyDraft(): Draft {
     notes: '',
     isActive: true,
     parameters: {},
+    recipientScope: 'none',
+    recipientDepartments: [],
+    recipientUserIds: [],
   };
 }
 

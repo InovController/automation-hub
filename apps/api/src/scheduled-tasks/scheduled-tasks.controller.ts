@@ -66,6 +66,9 @@ export class ScheduledTasksController {
         notes: typeof body.notes === 'string' ? body.notes : undefined,
         parameters: parseParameters(body.parameters),
         isActive: typeof body.isActive === 'boolean' ? body.isActive : String(body.isActive) === 'true',
+        recipientScope: typeof body.recipientScope === 'string' ? body.recipientScope : undefined,
+        recipientDepartments: parseStringArray(body.recipientDepartments),
+        recipientUserIds: parseStringArray(body.recipientUserIds),
       },
       files,
     );
@@ -76,6 +79,23 @@ export class ScheduledTasksController {
     const user = await this.authService.requireUser(request);
     return this.scheduledTasksService.deleteTask(user, id);
   }
+}
+
+function parseStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string');
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item): item is string => typeof item === 'string');
+      }
+    } catch {
+      return [];
+    }
+  }
+  return [];
 }
 
 function parseParameters(value: unknown) {

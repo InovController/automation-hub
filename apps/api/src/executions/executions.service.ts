@@ -24,6 +24,7 @@ type CreateExecutionInput = {
   notes?: string;
   priority?: number;
   parameters?: Record<string, unknown>;
+  scheduledTaskId?: string;
 };
 
 @Injectable()
@@ -63,6 +64,7 @@ export class ExecutionsService {
         notes: payload.notes,
         priority: payload.priority ?? 0,
         inputJson: (payload.parameters ?? {}) as Prisma.InputJsonValue,
+        scheduledTaskId: payload.scheduledTaskId,
       },
     });
 
@@ -192,6 +194,13 @@ export class ExecutionsService {
         robot: true,
         files: true,
       },
+    });
+  }
+
+  async getScheduledTaskId(id: string) {
+    return this.prisma.execution.findUnique({
+      where: { id },
+      select: { scheduledTaskId: true },
     });
   }
 

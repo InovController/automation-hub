@@ -9,6 +9,8 @@ import { AuthPage } from './pages/auth-page';
 import { DashboardPage } from './pages/dashboard-page';
 import { ExecutionPage } from './pages/execution-page';
 import { HistoryPage } from './pages/history-page';
+import { NotificationsPage } from './pages/notifications-page';
+import { ResultsPage } from './pages/results-page';
 import { RobotDetailPage } from './pages/robot-detail-page';
 import { RobotsPage } from './pages/robots-page';
 import { SchedulesPage } from './pages/schedules-page';
@@ -57,6 +59,8 @@ function AppRoutes() {
         <Route path="/schedules" element={<SchedulesPage />} />
         <Route path="/executions/:id" element={<ExecutionPage />} />
         <Route path="/history" element={<HistoryPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/results" element={<ResultsPage />} />
         <Route path="/time-savings" element={<TimeSavingsPage />} />
         <Route
           path="/settings"
