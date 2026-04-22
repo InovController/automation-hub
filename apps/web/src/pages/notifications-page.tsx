@@ -6,7 +6,7 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { useHub } from '../contexts/hub-context';
-import { api } from '../lib/api';
+import { api, downloadFile } from '../lib/api';
 import type { Notification } from '../lib/types';
 import { formatDate } from '../lib/utils';
 import { cn } from '../lib/utils';
@@ -146,16 +146,14 @@ function NotificationCard({
       {(outputFiles.length > 0 || notification.executionId) ? (
         <CardContent className="flex flex-wrap items-center gap-3 pt-0">
           {outputFiles.map((file) => (
-            <a
+            <button
               key={file.id}
-              href={file.downloadUrl}
-              download={file.downloadName ?? true}
-              onClick={onMarkRead}
+              onClick={() => { onMarkRead(); void downloadFile(file.downloadUrl, file.downloadName ?? 'arquivo'); }}
               className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-[#2b2b31] dark:bg-[#111113] dark:text-zinc-200 dark:hover:bg-[#18181b]"
             >
               <Download className="h-3.5 w-3.5 text-slate-400" />
               {file.downloadName ?? 'arquivo'}
-            </a>
+            </button>
           ))}
           {notification.executionId ? (
             <Button asChild variant="outline" size="sm" onClick={onMarkRead}>

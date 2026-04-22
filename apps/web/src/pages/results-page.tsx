@@ -6,7 +6,7 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { useHub } from '../contexts/hub-context';
-import { api } from '../lib/api';
+import { api, downloadFile } from '../lib/api';
 import type { Notification } from '../lib/types';
 import { formatDate } from '../lib/utils';
 
@@ -96,16 +96,15 @@ function ResultCard({ notification }: { notification: Notification }) {
 
       <CardContent className="grid gap-2 pt-0">
         {files.map((file) => (
-          <a
+          <button
             key={file.id}
-            href={file.downloadUrl}
-            download={file.downloadName ?? true}
+            onClick={() => void downloadFile(file.downloadUrl, file.downloadName ?? 'arquivo')}
             className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-[#2b2b31] dark:bg-[#111113] dark:text-zinc-200 dark:hover:bg-[#18181b]"
           >
             <FileDown className="h-4 w-4 shrink-0 text-sky-500" />
             <span className="truncate">{file.downloadName ?? 'arquivo'}</span>
             <Download className="ml-auto h-3.5 w-3.5 shrink-0 text-slate-400" />
-          </a>
+          </button>
         ))}
 
         {notification.executionId ? (

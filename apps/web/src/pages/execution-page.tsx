@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Progress } from '../components/ui/progress';
 import { Separator } from '../components/ui/separator';
 import { useHub } from '../contexts/hub-context';
-import { api } from '../lib/api';
+import { api, downloadFile } from '../lib/api';
 import type { Execution } from '../lib/types';
 import { formatDate, statusLabel, statusVariant, userFileName } from '../lib/utils';
 import { useParams } from 'react-router-dom';
@@ -211,14 +211,13 @@ function FileCard({
                   </div>
                   <div className="text-sm text-slate-500 dark:text-slate-400">{file.kind === 'input' ? 'Entrada' : 'Saída'}</div>
                 </div>
-                <Button asChild variant="outline" size="sm">
-                  <a
-                    href={file.downloadUrl}
-                    download={userFileName(file.downloadName || file.originalName || file.filename)}
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Baixar
-                  </a>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => downloadFile(file.downloadUrl, userFileName(file.downloadName || file.originalName || file.filename))}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Baixar
                 </Button>
               </div>
               {index < files.length - 1 ? <Separator className="mt-4" /> : null}

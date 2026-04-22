@@ -11,7 +11,7 @@ import { Textarea } from '../components/ui/textarea';
 import { useAuth } from '../contexts/auth-context';
 import { useHub } from '../contexts/hub-context';
 import { DEPARTMENT_OPTIONS, ROLE_LABELS } from '../lib/constants';
-import { api } from '../lib/api';
+import { api, downloadFile } from '../lib/api';
 import type {
   Department,
   ManagedUser,
@@ -1026,13 +1026,8 @@ function InputExampleRow({
         ) : null}
       </div>
       <div className="flex items-center gap-2">
-        <Button asChild variant="outline">
-          <a
-            href={example.downloadUrl}
-            download={userFileName(example.downloadName || example.filename)}
-          >
-            Baixar
-          </a>
+        <Button variant="outline" onClick={() => void downloadFile(example.downloadUrl, userFileName(example.downloadName || example.filename))}>
+          Baixar
         </Button>
         <Button variant="danger" onClick={() => void onDelete()}>
           Remover

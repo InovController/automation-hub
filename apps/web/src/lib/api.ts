@@ -46,3 +46,22 @@ export async function api<T>(path: string, options: RequestInit = {}) {
 
   return response.text() as T;
 }
+
+export async function downloadFile(url: string, filename: string) {
+  const token = getStoredToken();
+  const headers = new Headers();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) throw new Error(`Erro ${response.status} ao baixar arquivo`);
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(objectUrl);
+}

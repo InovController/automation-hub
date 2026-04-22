@@ -12,7 +12,7 @@ import { Separator } from '../components/ui/separator';
 import { Textarea } from '../components/ui/textarea';
 import { useAuth } from '../contexts/auth-context';
 import { useHub } from '../contexts/hub-context';
-import { api } from '../lib/api';
+import { api, downloadFile } from '../lib/api';
 import type { Robot, RobotInputExample, RobotSchemaField, RobotSchemaFileInput } from '../lib/types';
 import { userFileName } from '../lib/utils';
 
@@ -220,14 +220,13 @@ export function RobotDetailPage() {
                   <div className="space-y-3">
                     <div className="text-sm font-medium">Modelos de entrada</div>
                     {inputExamples.map((example) => (
-                      <a
+                      <button
                         key={example.id}
-                        href={example.downloadUrl}
-                        download={userFileName(example.downloadName || example.filename)}
-                        className="flex items-start gap-3 rounded-2xl border border-slate-200 px-3 py-2 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900/70"
+                        onClick={() => void downloadFile(example.downloadUrl, userFileName(example.downloadName || example.filename))}
+                        className="flex w-full items-start gap-3 rounded-2xl border border-slate-200 px-3 py-2 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900/70"
                       >
                         <FileDown className="mt-0.5 h-4 w-4 text-slate-500 dark:text-slate-400" />
-                        <div className="min-w-0">
+                        <div className="min-w-0 text-left">
                           <div className="truncate text-sm">
                             {example.title || userFileName(example.downloadName || example.filename)}
                           </div>
@@ -235,7 +234,7 @@ export function RobotDetailPage() {
                             {example.fileInputName ? `Para: ${example.fileInputName}` : 'Modelo geral'}
                           </div>
                         </div>
-                      </a>
+                      </button>
                     ))}
                   </div>
                 </>
@@ -364,14 +363,13 @@ function FileInputRenderer({
             <div className="mb-2 font-medium">Modelos disponíveis para este upload:</div>
             <div className="flex flex-wrap gap-2">
               {examples.map((example) => (
-                <a
+                <button
                   key={example.id}
-                  href={example.downloadUrl}
-                  download={userFileName(example.downloadName || example.filename)}
+                  onClick={() => void downloadFile(example.downloadUrl, userFileName(example.downloadName || example.filename))}
                   className="rounded-lg border border-slate-200 px-2 py-1 hover:bg-white dark:border-slate-700 dark:hover:bg-slate-900"
                 >
                   {example.title || userFileName(example.downloadName || example.filename)}
-                </a>
+                </button>
               ))}
             </div>
           </div>
