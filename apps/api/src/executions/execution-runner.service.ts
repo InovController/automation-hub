@@ -58,11 +58,15 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
 
   async stopExecution(executionId: string) {
     const running = this.runningProcesses.get(executionId);
+    this.logger.log(`stopExecution: executionId=${executionId} running=${!!running} pid=${running?.child.pid}`);
     this.stoppedExecutions.add(executionId);
     if (running) {
       await terminateProcessTree(running.child.pid);
       this.runningProcesses.delete(executionId);
+      this.logger.log(`stopExecution: processo terminado pid=${running.child.pid}`);
       await this.executionsService.log(executionId, 'warn', 'Processo interrompido pelo usuario.');
+    } else {
+      this.logger.warn(`stopExecution: execucao ${executionId} nao encontrada em runningProcesses`);
     }
   }
 
@@ -328,6 +332,7 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
 
     await new Promise<void>((resolve, reject) => {
       child.on('close', async (code) => {
+        this.logger.log(`child.close: executionId=${executionId} code=${code} stopped=${this.stoppedExecutions.has(executionId)}`);
         try {
           await stdoutReader.flush();
           await stderrReader.flush();
