@@ -62,6 +62,10 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
     this.stoppedExecutions.add(executionId);
     if (running) {
       await terminateProcessTree(running.child.pid);
+      // Force-close stdio streams so the Node.js 'close' event fires even if
+      // child processes (e.g. Python spawned by the shell) are still running.
+      running.child.stdout?.destroy();
+      running.child.stderr?.destroy();
       this.runningProcesses.delete(executionId);
       this.logger.log(`stopExecution: processo terminado pid=${running.child.pid}`);
       await this.executionsService.log(executionId, 'warn', 'Processo interrompido pelo usuario.');
