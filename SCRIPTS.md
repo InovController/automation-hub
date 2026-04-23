@@ -258,7 +258,52 @@ if __name__ == '__main__':
 
 ---
 
-## 9. Dicas e cuidados
+## 9. Arquivos intermediários e screenshots de erro
+
+Arquivos gravados em `AUTOMATION_OUTPUT_DIR` ficam disponíveis para download **somente quando a execução termina** (com sucesso, erro ou cancelamento). Não há como disponibilizar arquivos para download enquanto o script ainda está rodando.
+
+Para comunicar ao usuário que um arquivo foi salvo durante a execução, use `AH_LOG` — o arquivo estará disponível no final:
+
+```python
+import os
+
+output_dir = os.environ['AUTOMATION_OUTPUT_DIR']
+
+# Salva um arquivo intermediário (ex: planilha parcial, screenshot de erro)
+planilha_path = os.path.join(output_dir, 'resultado_parcial.xlsx')
+workbook.save(planilha_path)
+
+# Avisa o usuário via log (o arquivo aparece para download quando a execução terminar)
+print(f"AH_LOG|info|Planilha parcial salva: resultado_parcial.xlsx")
+```
+
+### Screenshots de erro com Playwright/nodriver
+
+Se o script usa automação de browser, capture screenshots quando um elemento não for encontrado — isso ajuda a identificar em qual tela o robô travou:
+
+```python
+async def consultar(page, dado: str):
+    try:
+        elemento = await asyncio.wait_for(page.find("Botão Exemplo"), timeout=30)
+        await elemento.click()
+    except Exception as exc:
+        # Salva screenshot no output para diagnóstico
+        screenshot = os.path.join(output_dir, f"erro_{dado}.png")
+        try:
+            await page.save_screenshot(screenshot)
+            print(f"AH_LOG|warn|Screenshot salvo: erro_{dado}.png")
+        except Exception:
+            pass
+        # Recarrega a página para tentar o próximo item
+        await page.get("https://...")
+        raise
+```
+
+> **Padrão recomendado:** use `asyncio.wait_for(..., timeout=N)` em todas as chamadas que buscam elementos na página. Sem timeout, o script pode travar indefinidamente esperando um elemento que nunca aparece.
+
+---
+
+## 10. Dicas e cuidados
 
 - **Encoding:** sempre use `encoding='utf-8'` ao abrir arquivos para evitar erros com acentos
 - **Caminhos:** nunca use caminhos fixos (`C:\...` ou `/home/...`). Use sempre as variáveis de ambiente
