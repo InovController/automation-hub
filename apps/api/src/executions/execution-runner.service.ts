@@ -208,7 +208,6 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
         execution.robot.id,
       );
       if (this.stoppedExecutions.has(execution.id)) {
-        await this.registerOutputFiles(execution.id);
         return;
       }
 
@@ -235,6 +234,8 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Falha inesperada durante a execucao';
       const current = await this.executionsService.getExecution(execution.id);
+
+      await this.registerOutputFiles(execution.id);
 
       if (current.status !== ExecutionStatus.canceled) {
         await this.executionsService.markAsError(execution.id, message);
