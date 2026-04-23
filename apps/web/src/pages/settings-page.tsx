@@ -466,7 +466,7 @@ function renderRobotsTab({
                   }
                 />
               </Field>
-              {!draft.workingDirectory?.includes('/scripts') ? (
+              {!draft.workingDirectory?.replace(/\\/g, '/').includes('/scripts') ? (
                 <>
                   <Field className="md:col-span-2" label="Comando de execução">
                     <Input value={draft.command} onChange={(e) => setDraft({ ...draft, command: e.target.value })} />
@@ -494,13 +494,13 @@ function renderRobotsTab({
             description="Suba um .zip ou .rar com todos os scripts Python. O hub configura o comando de execução automaticamente."
           >
             <div className="grid gap-4 rounded-3xl border border-slate-200 p-5 dark:border-slate-800">
-              {draft.workingDirectory?.includes('/scripts') ? (
+              {draft.workingDirectory?.replace(/\\/g, '/').includes('/scripts') ? (
                 <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3 dark:bg-emerald-950/30">
                   <div className="h-2 w-2 flex-shrink-0 rounded-full bg-emerald-500" />
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Scripts ativos</p>
                     <p className="truncate font-mono text-xs text-emerald-600 dark:text-emerald-400">
-                      {draft.command?.replace('python3 ', '') ?? ''}
+                      {draft.command?.replace(/^python3?\s+/, '') ?? ''}
                     </p>
                   </div>
                 </div>
