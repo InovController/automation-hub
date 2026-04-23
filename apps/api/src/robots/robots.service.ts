@@ -353,7 +353,8 @@ export class RobotsService {
       execSync(`pip3 install --target="${pipDir}" -r "${requirementsTxt}"`, { stdio: 'inherit' });
     }
 
-    const command = `python3 ${entry}`;
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    const command = `${pythonCmd} ${entry}`;
     const workingDirectory = scriptsDir;
 
     return this.prisma.robot.update({
