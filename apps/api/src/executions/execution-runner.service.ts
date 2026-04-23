@@ -208,6 +208,12 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
         execution.robot.id,
       );
       if (this.stoppedExecutions.has(execution.id)) {
+        try {
+          const registered = await this.registerOutputFiles(execution.id);
+          this.logger.log(`registerOutputFiles (canceled/linux): ${registered.length} arquivo(s) registrado(s) para execucao ${execution.id}`);
+        } catch (regError) {
+          this.logger.error(`registerOutputFiles falhou para execucao ${execution.id}: ${String(regError)}`);
+        }
         return;
       }
 
