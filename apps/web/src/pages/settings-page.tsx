@@ -546,10 +546,11 @@ function renderRobotsTab({
                         const formData = new FormData();
                         formData.append('file', scriptFile);
                         formData.append('entryScript', scriptEntryScript.trim());
-                        await api<Robot>(`/robots/${draft.id}/scripts`, {
+                        const updated = await api<Robot>(`/robots/${draft.id}/scripts`, {
                           method: 'POST',
                           body: formData,
                         });
+                        setDraft((prev) => ({ ...prev, command: updated.command ?? prev.command, workingDirectory: updated.workingDirectory ?? prev.workingDirectory }));
                         await refreshHub();
                         setScriptFile(null);
                         setScriptEntryScript('');
