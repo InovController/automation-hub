@@ -23,14 +23,16 @@ export function ExecutionPage() {
     let cancelled = false;
     let timer: number | undefined;
 
-    const load = async () => {
+    const load = async (finalCheck = false) => {
       if (!id) return;
       try {
         const data = await api<Execution>(`/executions/${id}`);
         if (!cancelled) {
           setExecution(data);
           if (data.status === 'queued' || data.status === 'running') {
-            timer = window.setTimeout(load, 2500);
+            timer = window.setTimeout(() => void load(), 2500);
+          } else if (!finalCheck) {
+            timer = window.setTimeout(() => void load(true), 2000);
           }
         }
       } catch (err) {
