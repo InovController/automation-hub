@@ -235,7 +235,12 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
       const message = error instanceof Error ? error.message : 'Falha inesperada durante a execucao';
       const current = await this.executionsService.getExecution(execution.id);
 
-      await this.registerOutputFiles(execution.id);
+      try {
+        const registered = await this.registerOutputFiles(execution.id);
+        this.logger.log(`registerOutputFiles: ${registered.length} arquivo(s) registrado(s) para execucao ${execution.id}`);
+      } catch (regError) {
+        this.logger.error(`registerOutputFiles falhou para execucao ${execution.id}: ${String(regError)}`);
+      }
 
       if (current.status !== ExecutionStatus.canceled) {
         await this.executionsService.markAsError(execution.id, message);

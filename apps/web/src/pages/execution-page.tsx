@@ -32,7 +32,7 @@ export function ExecutionPage() {
           if (data.status === 'queued' || data.status === 'running') {
             timer = window.setTimeout(() => void load(), 2500);
           } else if (!finalCheck) {
-            timer = window.setTimeout(() => void load(true), 2000);
+            timer = window.setTimeout(() => void load(true), 5000);
           }
         }
       } catch (err) {
