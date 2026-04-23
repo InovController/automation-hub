@@ -208,6 +208,7 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
         execution.robot.id,
       );
       if (this.stoppedExecutions.has(execution.id)) {
+        await this.registerOutputFiles(execution.id);
         return;
       }
 
