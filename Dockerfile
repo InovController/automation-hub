@@ -5,6 +5,13 @@ RUN apt-get update && apt-get install -y \
     chromium chromium-driver \
     --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
+RUN pip3 install --break-system-packages \
+    botcity-framework-web \
+    selenium==4.18.1 \
+    webdriver-manager \
+    pandas \
+    openpyxl
+
 WORKDIR /app
 
 COPY . .
