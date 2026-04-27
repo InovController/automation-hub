@@ -356,7 +356,6 @@ export class RobotsService {
     const hasRequirements = await access(requirementsTxt).then(() => true).catch(() => false);
 
     const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-    const pipCmd = process.platform === 'win32' ? 'pip' : 'pip3';
     const command = `${pythonCmd} ${entry}`;
     const workingDirectory = scriptsDir;
 
@@ -366,22 +365,44 @@ export class RobotsService {
     });
 
     if (hasRequirements) {
+      const content = await import('node:fs/promises').then((fs) =>
+        fs.readFile(requirementsTxt, 'utf8').catch(() => ''),
+      );
+      const hasPackages = content
+        .split('\n')
+        .some((line) => line.trim() && !line.trim().startsWith('#'));
+
       const pipDir = robotPipDir(robot.id);
       await rm(pipDir, { recursive: true, force: true });
-      await ensureRobotPipDir(robot.id);
-      this.pipStatus.set(robot.id, 'installing');
-      const pip = spawn(pipCmd, ['install', `--target=${pipDir}`, '-r', requirementsTxt], {
-        stdio: 'inherit',
-        shell: false,
-      });
-      pip.on('error', (err) => {
-        console.error(`[pip] erro ao instalar dependencias: ${err.message}`);
-        this.pipStatus.set(robot.id, 'error');
-      });
-      pip.on('close', (code) => {
-        console.log(`[pip] instalacao concluida com codigo ${code}`);
-        this.pipStatus.set(robot.id, code === 0 ? 'done' : 'error');
-      });
+
+      if (hasPackages) {
+        const venvPip = process.platform === 'win32'
+          ? join(pipDir, 'Scripts', 'pip.exe')
+          : join(pipDir, 'bin', 'pip');
+
+        this.pipStatus.set(robot.id, 'installing');
+
+        try {
+          execSync(`${pythonCmd} -m venv --system-site-packages "${pipDir}"`, { stdio: 'inherit' });
+        } catch (err) {
+          console.error(`[venv] erro ao criar venv: ${String(err)}`);
+          this.pipStatus.set(robot.id, 'error');
+          return updated;
+        }
+
+        const pip = spawn(venvPip, ['install', '-r', requirementsTxt], {
+          stdio: 'inherit',
+          shell: false,
+        });
+        pip.on('error', (err) => {
+          console.error(`[pip] erro ao instalar dependencias: ${err.message}`);
+          this.pipStatus.set(robot.id, 'error');
+        });
+        pip.on('close', (code) => {
+          console.log(`[pip] instalacao concluida com codigo ${code}`);
+          this.pipStatus.set(robot.id, code === 0 ? 'done' : 'error');
+        });
+      }
     }
 
     return updated;

@@ -296,12 +296,28 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
     const cwd = workingDirectory ? resolveWorkingDirectory(workingDirectory) : process.cwd();
 
     const pipDir = robotId ? robotPipDir(robotId) : null;
-    const hasPip = pipDir ? await access(pipDir).then(() => true).catch(() => false) : false;
-    const pythonPath = hasPip
-      ? [pipDir, process.env.PYTHONPATH].filter(Boolean).join(':')
-      : process.env.PYTHONPATH;
 
-    const child = spawn(command, {
+    let resolvedCommand = command;
+    let pythonPath: string | undefined = process.env.PYTHONPATH;
+
+    if (pipDir) {
+      const venvPython = process.platform === 'win32'
+        ? join(pipDir, 'Scripts', 'python.exe')
+        : join(pipDir, 'bin', 'python3');
+      const hasVenv = await access(venvPython).then(() => true).catch(() => false);
+
+      if (hasVenv) {
+        resolvedCommand = command.replace(/^python3?\s+/, `"${venvPython}" `);
+        pythonPath = undefined;
+      } else {
+        const hasPip = await access(pipDir).then(() => true).catch(() => false);
+        if (hasPip) {
+          pythonPath = [pipDir, process.env.PYTHONPATH].filter(Boolean).join(':');
+        }
+      }
+    }
+
+    const child = spawn(resolvedCommand, {
       cwd,
       shell: true,
       env: {
