@@ -367,6 +367,7 @@ export class RobotsService {
 
     if (hasRequirements) {
       const pipDir = robotPipDir(robot.id);
+      await rm(pipDir, { recursive: true, force: true });
       await ensureRobotPipDir(robot.id);
       this.pipStatus.set(robot.id, 'installing');
       const pip = spawn(pipCmd, ['install', `--target=${pipDir}`, '-r', requirementsTxt], {
