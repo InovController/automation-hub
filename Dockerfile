@@ -3,6 +3,7 @@ FROM node:22
 RUN apt-get update && apt-get install -y \
     python3 python3-pip python3-venv \
     chromium chromium-driver \
+    libnss3-tools \
     --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --break-system-packages \
