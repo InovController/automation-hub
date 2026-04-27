@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { Prisma, type User } from '@prisma/client';
 import { access, mkdir, rm, writeFile } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import AdmZip from 'adm-zip';
 import { createExtractorFromData } from 'node-unrar-js';
@@ -347,20 +347,29 @@ export class RobotsService {
     const requirementsTxt = join(scriptsDir, 'requirements.txt');
     const hasRequirements = await access(requirementsTxt).then(() => true).catch(() => false);
 
-    if (hasRequirements) {
-      const pipDir = robotPipDir(robot.id);
-      await ensureRobotPipDir(robot.id);
-      execSync(`pip3 install --target="${pipDir}" -r "${requirementsTxt}"`, { stdio: 'inherit' });
-    }
-
     const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    const pipCmd = process.platform === 'win32' ? 'pip' : 'pip3';
     const command = `${pythonCmd} ${entry}`;
     const workingDirectory = scriptsDir;
 
-    return this.prisma.robot.update({
+    const updated = await this.prisma.robot.update({
       where: { id: robot.id },
       data: { command, workingDirectory },
     });
+
+    if (hasRequirements) {
+      const pipDir = robotPipDir(robot.id);
+      await ensureRobotPipDir(robot.id);
+      // Run pip install in background so the HTTP response is not blocked
+      const pip = spawn(pipCmd, ['install', `--target=${pipDir}`, '-r', requirementsTxt], {
+        stdio: 'inherit',
+        shell: false,
+      });
+      pip.on('error', (err) => console.error(`[pip] erro ao instalar dependencias: ${err.message}`));
+      pip.on('close', (code) => console.log(`[pip] instalacao concluida com codigo ${code}`));
+    }
+
+    return updated;
   }
 
   async deleteRobot(id: string) {
