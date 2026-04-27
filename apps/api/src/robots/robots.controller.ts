@@ -164,6 +164,12 @@ export class RobotsController {
     );
   }
 
+  @Get(':id/pip-status')
+  async getPipStatus(@Param('id') id: string, @Req() request: Request) {
+    await this.authService.requireUser(request);
+    return { status: this.robotsService.getPipStatus(id) };
+  }
+
   @Delete(':id/examples/:exampleId')
   async deleteInputExample(
     @Param('id') id: string,

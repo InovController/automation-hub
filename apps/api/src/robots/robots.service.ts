@@ -30,9 +30,17 @@ type UploadedFile = {
   buffer?: Buffer;
 };
 
+type PipStatus = 'installing' | 'done' | 'error';
+
 @Injectable()
 export class RobotsService {
+  private readonly pipStatus = new Map<string, PipStatus>();
+
   constructor(private readonly prisma: PrismaService) {}
+
+  getPipStatus(robotId: string): PipStatus | null {
+    return this.pipStatus.get(robotId) ?? null;
+  }
 
   async getHubOverview(user: User) {
     const [robots, executions] = await Promise.all([
@@ -360,13 +368,19 @@ export class RobotsService {
     if (hasRequirements) {
       const pipDir = robotPipDir(robot.id);
       await ensureRobotPipDir(robot.id);
-      // Run pip install in background so the HTTP response is not blocked
+      this.pipStatus.set(robot.id, 'installing');
       const pip = spawn(pipCmd, ['install', `--target=${pipDir}`, '-r', requirementsTxt], {
         stdio: 'inherit',
         shell: false,
       });
-      pip.on('error', (err) => console.error(`[pip] erro ao instalar dependencias: ${err.message}`));
-      pip.on('close', (code) => console.log(`[pip] instalacao concluida com codigo ${code}`));
+      pip.on('error', (err) => {
+        console.error(`[pip] erro ao instalar dependencias: ${err.message}`);
+        this.pipStatus.set(robot.id, 'error');
+      });
+      pip.on('close', (code) => {
+        console.log(`[pip] instalacao concluida com codigo ${code}`);
+        this.pipStatus.set(robot.id, code === 0 ? 'done' : 'error');
+      });
     }
 
     return updated;

@@ -65,6 +65,7 @@ export function SettingsPage() {
   const [exampleDescription, setExampleDescription] = useState('');
   const [scriptFile, setScriptFile] = useState<File | null>(null);
   const [scriptEntryScript, setScriptEntryScript] = useState('');
+  const [pipStatus, setPipStatus] = useState<'installing' | 'done' | 'error' | null>(null);
 
   useEffect(() => {
     void loadUsers();
@@ -265,6 +266,8 @@ export function SettingsPage() {
             setScriptFile,
             scriptEntryScript,
             setScriptEntryScript,
+            pipStatus,
+            setPipStatus,
           })}
         </div>
       ) : (
@@ -366,6 +369,8 @@ function renderRobotsTab({
   setScriptFile,
   scriptEntryScript,
   setScriptEntryScript,
+  pipStatus,
+  setPipStatus,
 }: {
   draft: Draft;
   selectedRobot: Robot | null;
@@ -385,6 +390,8 @@ function renderRobotsTab({
   setScriptFile: React.Dispatch<React.SetStateAction<File | null>>;
   scriptEntryScript: string;
   setScriptEntryScript: React.Dispatch<React.SetStateAction<string>>;
+  pipStatus: 'installing' | 'done' | 'error' | null;
+  setPipStatus: React.Dispatch<React.SetStateAction<'installing' | 'done' | 'error' | null>>;
 }) {
   return (
     <div className="grid gap-6">
@@ -506,6 +513,28 @@ function renderRobotsTab({
                 </div>
               ) : null}
 
+              {pipStatus === 'installing' && (
+                <div className="flex items-center gap-3 rounded-2xl bg-amber-50 px-4 py-3 dark:bg-amber-950/30">
+                  <svg className="h-4 w-4 flex-shrink-0 animate-spin text-amber-500" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  <p className="text-sm font-medium text-amber-700 dark:text-amber-300">Instalando dependências... aguarde antes de executar.</p>
+                </div>
+              )}
+              {pipStatus === 'done' && (
+                <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3 dark:bg-emerald-950/30">
+                  <div className="h-2 w-2 flex-shrink-0 rounded-full bg-emerald-500" />
+                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Dependências instaladas. Pronto para executar.</p>
+                </div>
+              )}
+              {pipStatus === 'error' && (
+                <div className="flex items-center gap-3 rounded-2xl bg-red-50 px-4 py-3 dark:bg-red-950/30">
+                  <div className="h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />
+                  <p className="text-sm font-medium text-red-700 dark:text-red-300">Erro ao instalar dependências. Verifique o requirements.txt.</p>
+                </div>
+              )}
+
               <div className="grid gap-4 md:grid-cols-2">
                 <Field label="Arquivo (.zip ou .rar)">
                   <Input
@@ -555,6 +584,18 @@ function renderRobotsTab({
                         setScriptFile(null);
                         setScriptEntryScript('');
                         notify('Scripts enviados com sucesso.');
+                        // Poll pip install status
+                        const robotId = draft.id;
+                        setPipStatus('installing');
+                        const poll = setInterval(async () => {
+                          try {
+                            const res = await api<{ status: string | null }>(`/robots/${robotId}/pip-status`);
+                            if (res.status === 'done' || res.status === 'error') {
+                              setPipStatus(res.status as 'done' | 'error');
+                              clearInterval(poll);
+                            }
+                          } catch { clearInterval(poll); }
+                        }, 2000);
                       } catch (error) {
                         notify(error instanceof Error ? error.message : 'Não foi possível enviar os scripts.');
                       }
