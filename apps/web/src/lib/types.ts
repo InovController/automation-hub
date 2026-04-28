@@ -104,6 +104,7 @@ export type Robot = {
   conflictKeys?: string | null;
   command?: string | null;
   workingDirectory?: string | null;
+  scriptFileName?: string | null;
   allowedDepartments: Department[];
   schema?: RobotSchema;
   documentationUrl?: string | null;

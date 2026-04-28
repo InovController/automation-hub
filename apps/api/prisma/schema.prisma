@@ -63,6 +63,7 @@ model Robot {
   unitMetricKey      String? @default("itens_processados")
   command            String?
   workingDirectory   String?
+  scriptFileName     String?
   allowedDepartments Department[] @default([])
   schema             Json?
   documentationUrl   String?

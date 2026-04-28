@@ -40,6 +40,7 @@ type Draft = {
   conflictKeys: string;
   command: string;
   workingDirectory: string;
+  scriptFileName: string;
   allowedDepartments: Department[];
   documentationUrl: string;
   documentationLabel: string;
@@ -502,14 +503,30 @@ function renderRobotsTab({
           >
             <div className="grid gap-4 rounded-3xl border border-slate-200 p-5 dark:border-slate-800">
               {draft.workingDirectory?.replace(/\\/g, '/').includes('/scripts') ? (
-                <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3 dark:bg-emerald-950/30">
-                  <div className="h-2 w-2 flex-shrink-0 rounded-full bg-emerald-500" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Scripts ativos</p>
-                    <p className="truncate font-mono text-xs text-emerald-600 dark:text-emerald-400">
-                      {draft.command?.replace(/^python3?\s+/, '') ?? ''}
-                    </p>
+                <div className="flex items-center justify-between gap-3 rounded-2xl bg-emerald-50 px-4 py-3 dark:bg-emerald-950/30">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-2 w-2 flex-shrink-0 rounded-full bg-emerald-500" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Scripts ativos</p>
+                      <p className="truncate font-mono text-xs text-emerald-600 dark:text-emerald-400">
+                        {draft.command?.replace(/^python3?\s+/, '') ?? ''}
+                      </p>
+                      {draft.scriptFileName ? (
+                        <p className="truncate text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
+                          {draft.scriptFileName}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
+                  {draft.scriptFileName && draft.id ? (
+                    <a
+                      href={`/storage/robots/${draft.id}/scripts/_upload.zip`}
+                      download={draft.scriptFileName}
+                      className="flex-shrink-0 rounded-xl border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+                    >
+                      Baixar
+                    </a>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -1189,6 +1206,7 @@ function emptyDraft(): Draft {
     conflictKeys: '',
     command: '',
     workingDirectory: '',
+    scriptFileName: '',
     allowedDepartments: [],
     documentationUrl: '',
     documentationLabel: 'Documentação',
@@ -1218,6 +1236,7 @@ function mapRobotToDraft(robot: Robot): Draft {
     conflictKeys: robot.conflictKeys ?? '',
     command: robot.command ?? '',
     workingDirectory: robot.workingDirectory ?? '',
+    scriptFileName: robot.scriptFileName ?? '',
     allowedDepartments: robot.allowedDepartments ?? [],
     documentationUrl: robot.documentationUrl ?? '',
     documentationLabel: robot.documentationLabel ?? 'Documentação',

@@ -358,10 +358,13 @@ export class RobotsService {
     const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
     const command = `${pythonCmd} ${entry}`;
     const workingDirectory = scriptsDir;
+    const scriptFileName = file.originalname ?? null;
+
+    await writeFile(join(scriptsDir, '_upload.zip'), file.buffer);
 
     const updated = await this.prisma.robot.update({
       where: { id: robot.id },
-      data: { command, workingDirectory },
+      data: { command, workingDirectory, scriptFileName },
     });
 
     if (hasRequirements) {
@@ -402,7 +405,11 @@ export class RobotsService {
           console.log(`[pip] instalacao concluida com codigo ${code}`);
           this.pipStatus.set(robot.id, code === 0 ? 'done' : 'error');
         });
+      } else {
+        this.pipStatus.set(robot.id, 'done');
       }
+    } else {
+      this.pipStatus.set(robot.id, 'done');
     }
 
     return updated;
