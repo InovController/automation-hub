@@ -320,6 +320,7 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
     const child = spawn(resolvedCommand, {
       cwd,
       shell: true,
+      detached: process.platform !== 'win32',
       env: {
         ...process.env,
         ...(pythonPath ? { PYTHONPATH: pythonPath } : {}),
@@ -353,6 +354,10 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
     await new Promise<void>((resolve, reject) => {
       child.on('close', async (code) => {
         this.logger.log(`child.close: executionId=${executionId} code=${code} stopped=${this.stoppedExecutions.has(executionId)}`);
+        // Kill any orphan children (Chrome, chromedriver, etc.) that survived
+        if (process.platform !== 'win32' && child.pid) {
+          try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already gone */ }
+        }
         try {
           await stdoutReader.flush();
           await stderrReader.flush();
@@ -503,10 +508,10 @@ function terminateProcessTree(pid?: number) {
   return new Promise<void>((resolve) => {
     try {
       // Negative PID kills the entire process group on Unix
-      process.kill(-pid, 'SIGTERM');
+      process.kill(-pid, 'SIGKILL');
     } catch {
       try {
-        process.kill(pid, 'SIGTERM');
+        process.kill(pid, 'SIGKILL');
       } catch {
         // Process already gone
       }
