@@ -1,0 +1,20 @@
+[Unit]
+Description=Automation Hub (NestJS)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/automation-hub/apps/api
+ExecStart=/usr/bin/node dist/main
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Permissão para o deploy.sh reiniciar o serviço sem senha
+# (configurado via sudoers pelo setup.sh)
+
+[Install]
+WantedBy=multi-user.target

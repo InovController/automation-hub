@@ -220,25 +220,105 @@ O repositório git local foi inicializado **dentro da pasta `automation-hub/`** 
 - Anteriormente havia um `.git` aninhado em `apps/api/` que foi removido
 - O `.gitignore` exclui: `node_modules/`, `.env`, `dist/`, `apps/api/data/`, `.claude/`, `tmp/`, `logs/`
 
-### Deploy — Railway
-- Plataforma alvo: **Railway** (railway.app)
-- Arquivo de configuração: `railway.json` na raiz do projeto
-- Build: `cd apps/web && npm install && npm run build && cd ../api && npm install && npm run build && npx prisma generate`
-- Start: `cd apps/api && node dist/main`
-- **Status atual (2026-04-10):** configuração criada, push para o GitHub ainda pendente de conclusão
+### Deploy — Oracle Cloud Free Tier (migração em andamento)
 
-#### Passos para concluir o deploy no Railway
-1. Fazer o push do código: `git push -u origin master`
-2. Acessar railway.app → New Project → Deploy from GitHub → InovController/automation-hub
-3. Adicionar serviço PostgreSQL (gerenciado pelo Railway, sem Docker)
-4. Configurar variáveis de ambiente no serviço:
-   - `DATABASE_URL` → Railway preenche automaticamente ao linkar o PostgreSQL
-   - `RUNNER_MAX_CONCURRENCY=2`
-   - `RUNNER_MEMORY_THRESHOLD_PERCENT=90`
-   - `ALLOWED_ORIGIN=https://<url-gerada>.railway.app`
-5. Rodar as migrações após o primeiro deploy: `npx prisma migrate deploy`
+**Decisão (2026-06-26):** Migrar do Railway ($5/mês) para Oracle Cloud Free Tier (gratuito para sempre).
 
-#### Banco de dados em produção
-- Localmente usa Docker Compose com PostgreSQL na porta `5433`
-- Em produção no Railway usa o PostgreSQL **gerenciado pelo Railway** (não Docker)
+#### Por que Oracle Cloud e não outras alternativas
+- **Render free:** dorme após 15min de inatividade — mata o queue runner de 3s
+- **Fly.io free:** 256MB RAM — insuficiente para Chrome/Playwright
+- **Oracle Cloud:** VM ARM com até 24GB RAM, sempre ligada, genuinamente gratuita para sempre
+- O app precisa de servidor persistente (spawn de processos Python + Chrome)
+
+#### Conta Oracle Cloud — configuração feita
+- **Conta:** inovacao01@controller-rnc.com.br
+- **Região home:** sa-saopaulo-1 (Brazil East — São Paulo)
+- **VCN criada:** `automation-hub-vcn`
+  - Public subnet: `public subnet-automation-hub-vcn`
+  - Subnet OCID: `ocid1.subnet.oc1.sa-saopaulo-1.aaaaaaaaqp7jwln2pbnzqq2icesaaxsivhvtbmrlwhkcmejq74mbbbm325ga`
+- **Tipo de autenticação:** IDCS federado — API key não funciona, usar sempre `oci session authenticate`
+- **OCI CLI instalado em:** `C:\Users\davi.inov\AppData\Roaming\Python\Python313\Scripts\oci.exe`
+- **Config OCI:** `C:\Users\davi.inov\.oci\config` (perfil: `automation-hub`, auth: security_token)
+- **Chave SSH da VM:** `C:\Users\davi.inov\Downloads\ssh-key-2026-06-26.key` (privada) e `.key (1).pub` (pública)
+
+#### Status atual (2026-06-29): aguardando capacidade ARM — possível mudança de plano
+A VM ainda não foi criada — região São Paulo está sem slots disponíveis para `VM.Standard.A1.Flex`.
+Script de retry em `infra/retry-create-instance.ps1` precisa ser rodado manualmente quando necessário (token expira em 1h).
+**Alternativa sendo avaliada:** usar a VM Windows da própria empresa (ver seção abaixo).
+
+**VM alvo:**
+- Shape: `VM.Standard.A1.Flex` — 2 OCPUs, 12GB RAM
+- Imagem: Ubuntu 22.04 ARM (`ocid1.image.oc1.sa-saopaulo-1.aaaaaaaaemf52b7af7ncncxz6pdc6hrlkdmylvwejfzpwnpbuhlfxwhrno6a`)
+- Availability Domain: `Dvuk:SA-SAOPAULO-1-AD-1`
+- Tenancy/Compartment OCID: `ocid1.tenancy.oc1..aaaaaaaayxffp5rs7fca7efucwrxxf4hxtwmlzeqr26by42pmwwiitgp7qnq`
+
+#### Scripts criados em `infra/`
+| Arquivo | Descrição |
+|---|---|
+| `infra/setup.sh` | Roda 1x na VM após criação: instala Node.js, Python, PostgreSQL, Chromium, cria .env, builda o app, instala systemd service |
+| `infra/deploy.sh` | Roda a cada deploy (GitHub Actions): pull, build, migrate, restart |
+| `infra/automation-hub.service` | Serviço systemd que mantém o app rodando |
+| `infra/sudoers-automation-hub` | Permite restart do serviço sem senha (necessário para deploy automático) |
+| `infra/retry-create-instance.ps1` | Script PowerShell que fica tentando criar a VM até conseguir, com renovação automática de token e desligamento do PC ao terminar |
+| `.github/workflows/deploy.yml` | GitHub Actions: deploy automático a cada push na master via SSH |
+
+#### Como retomar quando a VM for criada
+Quando o script conseguir criar a VM, ele:
+1. Mostra um popup com o IP público
+2. Salva o IP em `C:\Users\davi.inov\Desktop\oracle-vm-ip.txt`
+3. Desliga o PC (pode cancelar com `shutdown /a`)
+
+Com o IP em mãos, rodar o setup na VM:
+```bash
+ssh -i "Downloads\ssh-key-2026-06-26.key" ubuntu@SEU_IP
+bash <(curl -s https://raw.githubusercontent.com/InovController/automation-hub/master/infra/setup.sh)
+```
+
+Depois configurar os 3 secrets no GitHub (Settings → Secrets → Actions):
+- `SSH_HOST` → IP da VM
+- `SSH_USER` → `ubuntu`
+- `SSH_KEY` → conteúdo do arquivo `.key` (chave privada)
+
+#### Como rodar o script de retry manualmente
+Se o script tiver parado (PC reiniciou, etc.):
+```powershell
+# 1. Renovar token (abre browser)
+oci session authenticate --region sa-saopaulo-1 --profile automation-hub
+
+# 2. Rodar o script
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+& "C:\Users\davi.inov\Documents\automation-hub\infra\retry-create-instance.ps1"
+```
+
+#### Nota importante sobre autenticação Oracle
+A conta usa **IDCS (Identity Cloud Service)** — autenticação por API key não funciona.
+Sempre usar `--auth security_token --profile automation-hub` nos comandos OCI CLI.
+O token dura 1h mas o script renova automaticamente a cada 50min via `oci session refresh`.
+
+---
+
+### Deploy — VM Windows da empresa (alternativa principal a partir de 2026-06-29)
+
+**Contexto:** Oracle Cloud com capacidade indisponível + Railway custa $5/mês → avaliar uso da VM Windows interna da empresa.
+
+**O que se sabe da VM:**
+- Windows Server, acesso via Remote Desktop (RDP)
+- RAM: 6.3GB total, 4.4GB em uso (~1.9GB livre) — pode ser limitado para Chrome/Playwright
+- Já tem outros sites rodando (porta 80/443 ocupada por outro servidor web)
+- Domínio disponível: provavelmente algo como `hub.controller-rnc.com.br`
+- Gerenciada pelo próprio Davi (acesso total)
+
+**Plano de deploy para Windows:**
+- NestJS como serviço Windows via PM2
+- PostgreSQL para Windows (ou usar instância já existente na VM)
+- IIS ou Nginx como reverse proxy para o subdomínio → porta 3000
+- Deploy via GitHub Actions + SSH/WinRM
+
+**Status:** a ser configurado — clonar o repo na VM e abrir Claude Code lá para inspecionar o ambiente e configurar tudo.
+
+---
+
+### Deploy — Railway *(descartado)*
+- Custo: $5/mês — substituído por alternativas gratuitas
+- Arquivo de configuração legado: `railway.json` na raiz
 - A `DATABASE_URL` muda entre dev e prod — nunca commitar o `.env` real

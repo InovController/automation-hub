@@ -1,0 +1,3 @@
+# Permite o usuário ubuntu reiniciar o serviço sem senha (necessário para o deploy automático)
+# Instalado pelo setup.sh em /etc/sudoers.d/automation-hub
+ubuntu ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart automation-hub, /usr/bin/systemctl status automation-hub, /usr/bin/journalctl
