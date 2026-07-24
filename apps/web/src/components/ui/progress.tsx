@@ -1,9 +1,11 @@
 export function Progress({ value }: { value: number }) {
+  const clamped = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+
   return (
     <div className="h-4 overflow-hidden rounded-full bg-slate-100 dark:bg-[#10192a]">
       <div
         className="h-full rounded-full bg-gradient-to-r from-sky-500 to-cyan-400 transition-[width]"
-        style={{ width: `${value}%` }}
+        style={{ width: `${clamped}%` }}
       />
     </div>
   );

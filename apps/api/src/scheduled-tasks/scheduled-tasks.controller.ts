@@ -12,6 +12,7 @@ import {
 import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import { AuthService } from '../auth/auth.service';
+import { uploadLimits } from '../shared/upload';
 import { ScheduledTasksService } from './scheduled-tasks.service';
 
 type UploadedFile = {
@@ -35,7 +36,7 @@ export class ScheduledTasksController {
   }
 
   @Post()
-  @UseInterceptors(AnyFilesInterceptor())
+  @UseInterceptors(AnyFilesInterceptor(uploadLimits))
   async saveTask(
     @Req() request: Request,
     @Body() body: Record<string, unknown>,
@@ -50,6 +51,7 @@ export class ScheduledTasksController {
         robotId: typeof body.robotId === 'string' ? body.robotId : undefined,
         frequency: typeof body.frequency === 'string' ? body.frequency : undefined,
         timeOfDay: typeof body.timeOfDay === 'string' ? body.timeOfDay : undefined,
+        timesOfDay: parseStringArray(body.timesOfDay),
         startDate: typeof body.startDate === 'string' ? body.startDate : undefined,
         dayOfWeek:
           typeof body.dayOfWeek === 'number'
@@ -69,6 +71,9 @@ export class ScheduledTasksController {
         recipientScope: typeof body.recipientScope === 'string' ? body.recipientScope : undefined,
         recipientDepartments: parseStringArray(body.recipientDepartments),
         recipientUserIds: parseStringArray(body.recipientUserIds),
+        creditMode: typeof body.creditMode === 'string' ? body.creditMode : undefined,
+        creditUserIds: parseStringArray(body.creditUserIds),
+        creditDepartment: typeof body.creditDepartment === 'string' ? body.creditDepartment : undefined,
       },
       files,
     );

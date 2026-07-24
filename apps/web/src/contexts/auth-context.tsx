@@ -8,18 +8,12 @@ import {
   type PropsWithChildren,
 } from 'react';
 import { api, getStoredToken, setStoredToken } from '../lib/api';
-import type { Department, SessionResponse, User } from '../lib/types';
+import type { SessionResponse, User } from '../lib/types';
 
 type AuthContextValue = {
   user: User | null;
   bootstrapping: boolean;
-  login: (payload: { email: string; password: string }) => Promise<void>;
-  register: (payload: {
-    name: string;
-    email: string;
-    password: string;
-    departments: Department[];
-  }) => Promise<void>;
+  login: (payload: { login: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -51,24 +45,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     void restoreSession();
   }, []);
 
-  const login = useCallback(async (payload: { email: string; password: string }) => {
+  const login = useCallback(async (payload: { login: string; password: string }) => {
     const session = await api<SessionResponse>('/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    setStoredToken(session.token);
-    setUser(session.user);
-  }, []);
-
-  const register = useCallback(async (payload: {
-    name: string;
-    email: string;
-    password: string;
-    departments: Department[];
-  }) => {
-    const session = await api<SessionResponse>('/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -88,8 +66,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, bootstrapping, login, register, logout }),
-    [bootstrapping, login, logout, register, user],
+    () => ({ user, bootstrapping, login, logout }),
+    [bootstrapping, login, logout, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

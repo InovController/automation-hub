@@ -1,7 +1,6 @@
-import { BookOpen, FileDown, FileText, FolderOpen, LifeBuoy, Play, Shield } from 'lucide-react';
+import { BookOpen, FileDown, FileText, LifeBuoy } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AppIcon } from '../components/app-icon';
 import { Field } from '../components/field';
 import { PageHeader } from '../components/page-header';
 import { Badge } from '../components/ui/badge';
@@ -12,7 +11,7 @@ import { Separator } from '../components/ui/separator';
 import { Textarea } from '../components/ui/textarea';
 import { useAuth } from '../contexts/auth-context';
 import { useHub } from '../contexts/hub-context';
-import { api, downloadFile } from '../lib/api';
+import { api, downloadWithFeedback } from '../lib/api';
 import type { Robot, RobotInputExample, RobotSchemaField, RobotSchemaFileInput } from '../lib/types';
 import { userFileName } from '../lib/utils';
 
@@ -46,17 +45,35 @@ export function RobotDetailPage() {
     };
   }, [id]);
 
-  if (loadError) return <p className="text-sm text-rose-500">{loadError}</p>;
-  if (!robot) return <p className="text-sm text-slate-500">Carregando automação...</p>;
+  if (loadError) {
+    return (
+      <div role="status" className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600 dark:border-rose-500/30 dark:bg-rose-950/20 dark:text-rose-400">
+        {loadError}
+      </div>
+    );
+  }
 
-  const fields = robot.schema?.fields ?? [];
+  if (!robot) {
+    return (
+      <div role="status" aria-live="polite" className="grid grid-cols-1 animate-pulse gap-6">
+        <div className="h-8 w-64 rounded-lg bg-slate-200 dark:bg-slate-800" />
+        <div className="h-32 rounded-3xl bg-slate-100 dark:bg-slate-800/50" />
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="h-96 rounded-3xl bg-slate-100 dark:bg-slate-800/50" />
+          <div className="h-96 rounded-3xl bg-slate-100 dark:bg-slate-800/50" />
+        </div>
+      </div>
+    );
+  }
+
+  const isAdmin = user?.role === 'admin';
+  const fields = (robot.schema?.fields ?? []).filter(f => !f.adminOnly || isAdmin);
   const fileInputs = robot.schema?.fileInputs ?? [];
   const inputExamples = robot.inputExamples ?? [];
 
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-1 gap-5">
       <PageHeader
-        eyebrow="Automação"
         title={robot.name}
         description={robot.description || robot.summary || 'Automação pronta para execução no hub.'}
         badge={
@@ -71,33 +88,27 @@ export function RobotDetailPage() {
         }
       />
 
-      <Card className="rounded-3xl">
-        <CardContent className="flex flex-col gap-6 p-6 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <AppIcon icon={robot.icon} className="h-16 w-16 rounded-3xl" />
-            <div className="space-y-1">
-              <div className="text-sm text-slate-500 dark:text-slate-400">Versão {robot.version}</div>
-              <div className="text-2xl font-semibold tracking-tight">{robot.name}</div>
-              <div className="text-sm text-slate-500 dark:text-slate-400">{robot.category || 'Categoria geral'}</div>
-            </div>
-          </div>
-          <div className="grid gap-2 text-sm text-slate-500 dark:text-slate-400 sm:grid-cols-2">
-            <SummaryPill icon={<Play className="h-4 w-4" />} label={`Concorrência ${robot.maxConcurrency ?? 1}`} />
-            <SummaryPill icon={<FolderOpen className="h-4 w-4" />} label={fileInputs.length > 0 ? 'Aceita arquivos' : 'Sem upload'} />
-            <SummaryPill icon={<Shield className="h-4 w-4" />} label={robot.conflictKeys || 'Sem conflitos'} />
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+<div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card className="rounded-3xl">
           <CardHeader>
             <CardTitle>Parâmetros de execução</CardTitle>
-            <CardDescription>Configure os campos abaixo para iniciar o processo com rastreabilidade.</CardDescription>
+            <CardDescription>
+              {robot.isExternal
+                ? 'Esta automação roda em outro sistema.'
+                : 'Configure os campos abaixo para iniciar o processo com rastreabilidade.'}
+            </CardDescription>
           </CardHeader>
+          {robot.isExternal ? (
+            <CardContent>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-zinc-300">
+                Essa automação não é executada por aqui — ela roda em outro sistema e reporta o tempo economizado
+                automaticamente para este hub assim que cada execução termina. Não há disparo manual.
+              </div>
+            </CardContent>
+          ) : (
           <CardContent>
             <form
-              className="grid gap-5 md:grid-cols-2"
+              className="grid grid-cols-1 gap-5 md:grid-cols-2"
               onSubmit={async (event) => {
                 event.preventDefault();
                 if (isSubmitting) return;
@@ -114,6 +125,9 @@ export function RobotDetailPage() {
                   const element = form.elements.namedItem(field.name);
                   if (field.type === 'checkbox' && element instanceof HTMLInputElement) {
                     payload[field.name] = element.checked;
+                  } else if (element instanceof RadioNodeList) {
+                    // Grupos de radio com 2+ opções retornam RadioNodeList
+                    payload[field.name] = element.value;
                   } else if (
                     element instanceof HTMLInputElement ||
                     element instanceof HTMLTextAreaElement ||
@@ -171,15 +185,16 @@ export function RobotDetailPage() {
                 <Button type="reset" variant="outline" disabled={isSubmitting}>
                   Limpar
                 </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? 'Enviando...' : 'Executar robô'}
+                <Button type="submit" disabled={isSubmitting || !robot.isActive}>
+                  {isSubmitting ? 'Enviando...' : robot.isActive ? 'Executar robô' : 'Em manutenção'}
                 </Button>
               </div>
             </form>
           </CardContent>
+          )}
         </Card>
 
-        <div className="grid gap-6">
+        <div className="grid grid-cols-1 gap-6">
           <Card className="rounded-3xl">
             <CardHeader>
               <CardTitle>Resumo operacional</CardTitle>
@@ -196,7 +211,7 @@ export function RobotDetailPage() {
             <CardHeader>
               <CardTitle>Recursos do robô</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-4">
+            <CardContent className="grid grid-cols-1 gap-4">
               <ResourceItem
                 icon={<BookOpen className="h-4 w-4" />}
                 label={robot.documentationLabel || 'Documentação'}
@@ -222,15 +237,16 @@ export function RobotDetailPage() {
                     {inputExamples.map((example) => (
                       <button
                         key={example.id}
-                        onClick={() => void downloadFile(example.downloadUrl, userFileName(example.downloadName || example.filename))}
+                        type="button"
+                        onClick={() => void downloadWithFeedback(example.downloadUrl, userFileName(example.downloadName || example.filename), notify)}
                         className="flex w-full items-start gap-3 rounded-2xl border border-slate-200 px-3 py-2 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900/70"
                       >
-                        <FileDown className="mt-0.5 h-4 w-4 text-slate-500 dark:text-slate-400" />
+                        <FileDown className="mt-0.5 h-4 w-4 text-slate-500 dark:text-zinc-400" />
                         <div className="min-w-0 text-left">
                           <div className="truncate text-sm">
                             {example.title || userFileName(example.downloadName || example.filename)}
                           </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                          <div className="text-xs text-slate-500 dark:text-zinc-400">
                             {example.fileInputName ? `Para: ${example.fileInputName}` : 'Modelo geral'}
                           </div>
                         </div>
@@ -247,19 +263,10 @@ export function RobotDetailPage() {
   );
 }
 
-function SummaryPill({ icon, label }: { icon: ReactNode; label: string }) {
-  return (
-    <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/80">
-      <span className="text-slate-500 dark:text-slate-400">{icon}</span>
-      <span>{label}</span>
-    </div>
-  );
-}
-
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800">
-      <span className="text-slate-500 dark:text-slate-400">{label}</span>
+      <span className="text-slate-500 dark:text-zinc-400">{label}</span>
       <span className="text-right font-medium">{value}</span>
     </div>
   );
@@ -268,12 +275,12 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 function ResourceItem({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="mt-0.5 rounded-xl border border-slate-200 p-2 text-slate-500 dark:border-slate-800 dark:text-slate-400">
+      <div className="mt-0.5 rounded-xl border border-slate-200 p-2 text-slate-500 dark:border-slate-800 dark:text-zinc-400">
         {icon}
       </div>
       <div className="min-w-0">
         <div className="font-medium">{label}</div>
-        <div className="break-words text-sm text-slate-500 dark:text-slate-400">{value}</div>
+        <div className="break-words text-sm text-slate-500 dark:text-zinc-400">{value}</div>
       </div>
     </div>
   );
@@ -285,7 +292,7 @@ function FieldRenderer({ field }: { field: RobotSchemaField }) {
   if (field.type === 'textarea') {
     return (
       <Field className={className} label={field.label}>
-        <Textarea name={field.name} placeholder={field.placeholder} />
+        <Textarea name={field.name} placeholder={field.placeholder} required={field.required} />
       </Field>
     );
   }
@@ -314,7 +321,7 @@ function FieldRenderer({ field }: { field: RobotSchemaField }) {
         <div className="flex flex-wrap gap-3">
           {(field.options ?? []).map((option) => (
             <label key={option} className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm dark:border-slate-700">
-              <input type="radio" name={field.name} value={option} defaultChecked={option === field.defaultValue} />
+              <input type="radio" name={field.name} value={option} defaultChecked={option === field.defaultValue} required={field.required} />
               {option}
             </label>
           ))}
@@ -348,9 +355,11 @@ function FileInputRenderer({
   fileInput: RobotSchemaFileInput;
   examples: RobotInputExample[];
 }) {
+  const { notify } = useHub();
+
   return (
     <Field className="md:col-span-2" label={fileInput.label} hint={fileInput.helperText}>
-      <div className="grid gap-2">
+      <div className="grid grid-cols-1 gap-2">
         <Input
           name={fileInput.name}
           type="file"
@@ -359,13 +368,14 @@ function FileInputRenderer({
           required={fileInput.required}
         />
         {examples.length > 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-zinc-300">
             <div className="mb-2 font-medium">Modelos disponíveis para este upload:</div>
             <div className="flex flex-wrap gap-2">
               {examples.map((example) => (
                 <button
                   key={example.id}
-                  onClick={() => void downloadFile(example.downloadUrl, userFileName(example.downloadName || example.filename))}
+                  type="button"
+                  onClick={() => void downloadWithFeedback(example.downloadUrl, userFileName(example.downloadName || example.filename), notify)}
                   className="rounded-lg border border-slate-200 px-2 py-1 hover:bg-white dark:border-slate-700 dark:hover:bg-slate-900"
                 >
                   {example.title || userFileName(example.downloadName || example.filename)}

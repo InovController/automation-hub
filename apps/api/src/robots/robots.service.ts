@@ -1,16 +1,18 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
-import { Prisma, type User } from '@prisma/client';
+import { Prisma, type Robot, type User } from '@prisma/client';
 import { access, mkdir, rm, writeFile } from 'node:fs/promises';
 import { execSync, spawn } from 'node:child_process';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import AdmZip from 'adm-zip';
 import { createExtractorFromData } from 'node-unrar-js';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  buildExecutionScope,
   canAccessExecution,
   canAccessRobot,
   normalizeDepartments,
 } from '../shared/access';
+import { generateToken, hashToken } from '../shared/crypto';
 import { toUserFileName, uniqueStoredFileName } from '../shared/files';
 import {
   ensureRobotExampleDirs,
@@ -21,6 +23,7 @@ import {
   robotPipDir,
   robotRoot,
   robotScriptsDir,
+  scheduleRoot,
 } from '../shared/storage';
 
 type UploadedFile = {
@@ -43,7 +46,9 @@ export class RobotsService {
   }
 
   async getHubOverview(user: User) {
-    const [robots, executions] = await Promise.all([
+    const executionScope = buildExecutionScope(user);
+
+    const [robots, executions, runningExecutions, successfulExecutions] = await Promise.all([
       this.prisma.robot.findMany({
         orderBy: [{ category: 'asc' }, { name: 'asc' }],
         include: {
@@ -53,10 +58,22 @@ export class RobotsService {
           executions: {
             orderBy: { createdAt: 'desc' },
             take: 1,
+            // Somente campos operacionais: a linha completa vazaria inputJson
+            // (parâmetros de outros usuários), notes e errorMessage
+            select: {
+              id: true,
+              status: true,
+              progress: true,
+              currentStep: true,
+              createdAt: true,
+              startedAt: true,
+              finishedAt: true,
+            },
           },
         },
       }),
       this.prisma.execution.findMany({
+        where: executionScope,
         orderBy: { createdAt: 'desc' },
         take: 20,
         include: {
@@ -69,6 +86,12 @@ export class RobotsService {
             },
           },
         },
+      }),
+      this.prisma.execution.count({
+        where: { ...(executionScope ?? {}), status: 'running' },
+      }),
+      this.prisma.execution.count({
+        where: { ...(executionScope ?? {}), status: 'success' },
       }),
     ]);
 
@@ -83,15 +106,11 @@ export class RobotsService {
       stats: {
         totalRobots: visibleRobots.length,
         readyRobots: visibleRobots.filter((robot) => robot.isActive).length,
-        runningExecutions: visibleExecutions.filter(
-          (item) => item.status === 'running',
-        ).length,
-        successfulExecutions: visibleExecutions.filter(
-          (item) => item.status === 'success',
-        ).length,
+        runningExecutions,
+        successfulExecutions,
       },
       robots: visibleRobots.map((robot) => ({
-        ...robot,
+        ...sanitizeRobot(robot),
         inputExamples: robot.inputExamples.map((item) => ({
           ...item,
           downloadUrl: `/storage/${item.storagePath}`,
@@ -116,7 +135,7 @@ export class RobotsService {
     return robots
       .filter((robot) => canAccessRobot(user, robot))
       .map((robot) => ({
-        ...robot,
+        ...sanitizeRobot(robot),
         inputExamples: robot.inputExamples.map((item) => ({
           ...item,
           downloadUrl: `/storage/${item.storagePath}`,
@@ -124,9 +143,9 @@ export class RobotsService {
       }));
   }
 
-  async findOne(id: string, user: User) {
-    const robot = await this.prisma.robot.findUnique({
-      where: { id },
+  async findOne(idOrSlug: string, user: User) {
+    const robot = await this.prisma.robot.findFirst({
+      where: { OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
       include: {
         executions: {
           orderBy: { createdAt: 'desc' },
@@ -152,7 +171,7 @@ export class RobotsService {
     }
 
     return {
-      ...robot,
+      ...sanitizeRobot(robot),
       executions: robot.executions
         .filter((execution) => canAccessExecution(user, execution))
         .map((execution) => ({
@@ -276,12 +295,15 @@ export class RobotsService {
       icon: input.icon?.trim() || 'bot',
       isActive: input.isActive ?? true,
       version: input.version?.trim() || '1.0.0',
-      estimatedMinutes: input.estimatedMinutes ?? null,
-      maxConcurrency: Math.max(1, input.maxConcurrency ?? 1),
-      manualSecondsPerUnit: Math.max(0, Math.floor(input.manualSecondsPerUnit ?? 0)),
+      // Number('abc') = NaN passaria direto e viraria erro 500 do Prisma
+      estimatedMinutes: sanitizeInt(input.estimatedMinutes, { min: 0, max: 100_000 }),
+      maxConcurrency: sanitizeInt(input.maxConcurrency, { min: 1, max: 20 }) ?? 1,
+      manualSecondsPerUnit: sanitizeInt(input.manualSecondsPerUnit, { min: 0, max: 1_000_000 }) ?? 0,
       unitLabel: input.unitLabel?.trim() || 'item',
       unitMetricKey: normalizeMetricKey(input.unitMetricKey) || 'itens_processados',
       conflictKeys: normalizeConflictKeys(input.conflictKeys),
+      zipOutput: input.zipOutput ?? false,
+      isExternal: input.isExternal ?? false,
       command: input.command?.trim() || null,
       workingDirectory: input.workingDirectory?.trim() || null,
       allowedDepartments: normalizeDepartments(input.allowedDepartments),
@@ -294,15 +316,25 @@ export class RobotsService {
     };
 
     if (input.id) {
-      return this.prisma.robot.update({
+      const existing = await this.prisma.robot.findUnique({
+        where: { id: input.id },
+        select: { id: true },
+      });
+      if (!existing) {
+        throw new BadRequestException('Automação não encontrada.');
+      }
+
+      const updated = await this.prisma.robot.update({
         where: { id: input.id },
         data: payload,
       });
+      return sanitizeRobot(updated);
     }
 
-    return this.prisma.robot.create({
+    const created = await this.prisma.robot.create({
       data: payload,
     });
+    return sanitizeRobot(created);
   }
 
   async uploadScript(robotId: string, entryScript: string, file?: UploadedFile) {
@@ -340,10 +372,13 @@ export class RobotsService {
       ) as ArrayBuffer;
       const extractor = await createExtractorFromData({ data: arrayBuffer });
       const extracted = extractor.extract();
+      const containmentRoot = resolve(scriptsDir) + sep;
       for (const entry of extracted.files) {
         if (entry.fileHeader.flags.directory) continue;
         if (!entry.extraction) continue;
-        const outPath = join(scriptsDir, entry.fileHeader.name);
+        // Zip-slip: uma entrada "..\..\x" escreveria fora da pasta do robô
+        const outPath = resolve(scriptsDir, entry.fileHeader.name);
+        if (!outPath.startsWith(containmentRoot)) continue;
         await mkdir(dirname(outPath), { recursive: true });
         await writeFile(outPath, Buffer.from(entry.extraction));
       }
@@ -390,7 +425,7 @@ export class RobotsService {
         } catch (err) {
           console.error(`[venv] erro ao criar venv: ${String(err)}`);
           this.pipStatus.set(robot.id, 'error');
-          return updated;
+          return sanitizeRobot(updated);
         }
 
         const pip = spawn(venvPip, ['install', '-r', requirementsTxt], {
@@ -412,7 +447,38 @@ export class RobotsService {
       this.pipStatus.set(robot.id, 'done');
     }
 
-    return updated;
+    return sanitizeRobot(updated);
+  }
+
+  async generateApiKey(robotId: string) {
+    const robot = await this.prisma.robot.findUnique({ where: { id: robotId } });
+    if (!robot) {
+      throw new BadRequestException('Automação não encontrada.');
+    }
+
+    // Prefixo reconhecível (estilo GitHub/Stripe) — a chave só é exibida uma
+    // vez aqui; o banco guarda só o hash, igual ao token de sessão
+    const apiKey = generateToken('ahk');
+    await this.prisma.robot.update({
+      where: { id: robotId },
+      data: { apiKeyHash: hashToken(apiKey) },
+    });
+
+    return { apiKey };
+  }
+
+  async revokeApiKey(robotId: string) {
+    const robot = await this.prisma.robot.findUnique({ where: { id: robotId } });
+    if (!robot) {
+      throw new BadRequestException('Automação não encontrada.');
+    }
+
+    await this.prisma.robot.update({
+      where: { id: robotId },
+      data: { apiKeyHash: null },
+    });
+
+    return { success: true };
   }
 
   async deleteRobot(id: string) {
@@ -421,6 +487,9 @@ export class RobotsService {
       include: {
         executions: {
           select: { id: true, status: true },
+        },
+        scheduledTasks: {
+          select: { id: true },
         },
       },
     });
@@ -440,6 +509,7 @@ export class RobotsService {
     }
 
     const executionIds = robot.executions.map((execution) => execution.id);
+    const scheduledTaskIds = robot.scheduledTasks.map((task) => task.id);
 
     await this.prisma.$transaction(async (tx) => {
       if (executionIds.length > 0) {
@@ -454,16 +524,26 @@ export class RobotsService {
         });
       }
 
+      // A FK de ScheduledTask é Restrict: sem isto o delete do robô falha
+      if (scheduledTaskIds.length > 0) {
+        await tx.scheduledTask.deleteMany({
+          where: { id: { in: scheduledTaskIds } },
+        });
+      }
+
       await tx.robot.delete({
         where: { id },
       });
     });
 
-    await Promise.all(
-      executionIds.map(async (executionId) => {
-        await rm(executionRoot(executionId), { recursive: true, force: true });
-      }),
-    );
+    await Promise.all([
+      ...executionIds.map((executionId) =>
+        rm(executionRoot(executionId), { recursive: true, force: true }),
+      ),
+      ...scheduledTaskIds.map((taskId) =>
+        rm(scheduleRoot(taskId), { recursive: true, force: true }),
+      ),
+    ]);
 
     await rm(robotRoot(id), { recursive: true, force: true });
 
@@ -487,6 +567,8 @@ export type RobotUpsertInput = {
   unitLabel?: string;
   unitMetricKey?: string;
   conflictKeys?: string;
+  zipOutput?: boolean;
+  isExternal?: boolean;
   command?: string;
   workingDirectory?: string;
   allowedDepartments?: unknown;
@@ -497,6 +579,24 @@ export type RobotUpsertInput = {
   supportValue?: string;
   dataPolicy?: string;
 };
+
+// A API key nunca deve trafegar de volta pro cliente — só o hash fica salvo,
+// e nem o hash deveria vazar; expomos só um booleano "tem chave configurada"
+function sanitizeRobot<T extends Robot>(robot: T) {
+  const { apiKeyHash, ...rest } = robot;
+  return { ...rest, hasApiKey: Boolean(apiKeyHash) };
+}
+
+function sanitizeInt(
+  value: number | null | undefined,
+  bounds: { min: number; max: number },
+) {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return Math.max(bounds.min, Math.min(bounds.max, Math.round(value)));
+}
 
 function normalizeSlug(value: string) {
   return value

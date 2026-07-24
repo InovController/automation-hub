@@ -9,13 +9,15 @@ import {
   type PropsWithChildren,
 } from 'react';
 import { api } from '../lib/api';
-import type { Execution, HubOverview } from '../lib/types';
+import type { DepartmentConfig, Execution, HubOverview } from '../lib/types';
+import { useAuth } from './auth-context';
 
 type HubContextValue = {
   hub: HubOverview | null;
+  hubError: boolean;
   executions: Execution[];
-  search: string;
-  setSearch: (value: string) => void;
+  departments: DepartmentConfig[];
+  refreshDepartments: () => Promise<void>;
   toast: string | null;
   notify: (message: string) => void;
   clearToast: () => void;
@@ -27,9 +29,11 @@ type HubContextValue = {
 const HubContext = createContext<HubContextValue | null>(null);
 
 export function HubProvider({ children }: PropsWithChildren) {
+  const { user } = useAuth();
   const [hub, setHub] = useState<HubOverview | null>(null);
+  const [hubError, setHubError] = useState(false);
   const [executions, setExecutions] = useState<Execution[]>([]);
-  const [search, setSearch] = useState('');
+  const [departments, setDepartments] = useState<DepartmentConfig[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -44,29 +48,53 @@ export function HubProvider({ children }: PropsWithChildren) {
   }, []);
 
   useEffect(() => {
+    // Só faz polling autenticado: na tela de login isso geraria 401 a cada 30s
+    if (!user) {
+      setUnreadNotifications(0);
+      return;
+    }
+
     void refreshUnreadCount();
     pollRef.current = setInterval(() => void refreshUnreadCount(), 30_000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [refreshUnreadCount]);
+  }, [refreshUnreadCount, user]);
+
+  const refreshDepartments = useCallback(async () => {
+    try {
+      const data = await api<DepartmentConfig[]>('/departments');
+      setDepartments(data);
+    } catch {
+      // silent — fallback to empty list
+    }
+  }, []);
 
   const refreshHub = useCallback(async () => {
-    const [hubData, executionsData] = await Promise.all([
-      api<HubOverview>('/robots/hub'),
-      api<Execution[]>('/executions'),
-    ]);
-
-    setHub(hubData);
-    setExecutions(executionsData);
+    try {
+      const [hubData, executionsData] = await Promise.all([
+        api<HubOverview>('/robots/hub'),
+        api<Execution[]>('/executions'),
+      ]);
+      setHub(hubData);
+      setExecutions(executionsData);
+      setHubError(false);
+    } catch {
+      setHubError(true);
+    }
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    void refreshDepartments();
+  }, [refreshDepartments, user]);
 
   const notify = useCallback((message: string) => setToast(message), []);
   const clearToast = useCallback(() => setToast(null), []);
 
   const value = useMemo(
-    () => ({ hub, executions, search, setSearch, toast, notify, clearToast, refreshHub, unreadNotifications, refreshUnreadCount }),
-    [clearToast, executions, hub, notify, refreshHub, search, toast, unreadNotifications, refreshUnreadCount],
+    () => ({ hub, hubError, executions, departments, refreshDepartments, toast, notify, clearToast, refreshHub, unreadNotifications, refreshUnreadCount }),
+    [clearToast, departments, executions, hub, hubError, notify, refreshDepartments, refreshHub, toast, unreadNotifications, refreshUnreadCount],
   );
 
   return <HubContext.Provider value={value}>{children}</HubContext.Provider>;

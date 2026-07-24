@@ -13,6 +13,8 @@ import {
 import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import { AuthService } from '../auth/auth.service';
+import { uploadLimits } from '../shared/upload';
+import { RobotsSyncService } from './robots-sync.service';
 import { RobotsService } from './robots.service';
 
 type UploadedFile = {
@@ -27,6 +29,7 @@ export class RobotsController {
   constructor(
     private readonly robotsService: RobotsService,
     private readonly authService: AuthService,
+    private readonly robotsSyncService: RobotsSyncService,
   ) {}
 
   @Get('hub')
@@ -39,6 +42,20 @@ export class RobotsController {
   async findAll(@Req() request: Request) {
     const user = await this.authService.requireUser(request);
     return this.robotsService.findAll(user);
+  }
+
+  @Get('sync/status')
+  async getSyncStatus(@Req() request: Request) {
+    const user = await this.authService.requireUser(request);
+    this.authService.ensureAdmin(user);
+    return this.robotsSyncService.getStatus();
+  }
+
+  @Post('sync')
+  async triggerSync(@Req() request: Request) {
+    const user = await this.authService.requireUser(request);
+    this.authService.ensureAdmin(user);
+    return this.robotsSyncService.sync();
   }
 
   @Get(':id')
@@ -95,6 +112,7 @@ export class RobotsController {
         typeof body.unitMetricKey === 'string' ? body.unitMetricKey : undefined,
       conflictKeys:
         typeof body.conflictKeys === 'string' ? body.conflictKeys : undefined,
+      isExternal: typeof body.isExternal === 'boolean' ? body.isExternal : body.isExternal === 'true',
       command: typeof body.command === 'string' ? body.command : undefined,
       workingDirectory:
         typeof body.workingDirectory === 'string'
@@ -123,7 +141,7 @@ export class RobotsController {
   }
 
   @Post(':id/examples')
-  @UseInterceptors(AnyFilesInterceptor())
+  @UseInterceptors(AnyFilesInterceptor(uploadLimits))
   async uploadInputExample(
     @Param('id') id: string,
     @Req() request: Request,
@@ -147,7 +165,7 @@ export class RobotsController {
   }
 
   @Post(':id/scripts')
-  @UseInterceptors(AnyFilesInterceptor())
+  @UseInterceptors(AnyFilesInterceptor(uploadLimits))
   async uploadScript(
     @Param('id') id: string,
     @Req() request: Request,
@@ -164,9 +182,24 @@ export class RobotsController {
     );
   }
 
+  @Post(':id/api-key')
+  async generateApiKey(@Param('id') id: string, @Req() request: Request) {
+    const user = await this.authService.requireUser(request);
+    this.authService.ensureAdmin(user);
+    return this.robotsService.generateApiKey(id);
+  }
+
+  @Delete(':id/api-key')
+  async revokeApiKey(@Param('id') id: string, @Req() request: Request) {
+    const user = await this.authService.requireUser(request);
+    this.authService.ensureAdmin(user);
+    return this.robotsService.revokeApiKey(id);
+  }
+
   @Get(':id/pip-status')
   async getPipStatus(@Param('id') id: string, @Req() request: Request) {
-    await this.authService.requireUser(request);
+    const user = await this.authService.requireUser(request);
+    this.authService.ensureAdmin(user);
     return { status: this.robotsService.getPipStatus(id) };
   }
 

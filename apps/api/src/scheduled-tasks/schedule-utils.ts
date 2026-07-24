@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { ScheduleFrequency } from '@prisma/client';
 
 export function parseTimeOfDay(value?: string | null) {
@@ -30,7 +31,7 @@ export function computeNextRunAt(input: {
 }) {
   const parsedTime = parseTimeOfDay(input.timeOfDay);
   if (!parsedTime) {
-    throw new Error('Horario invalido.');
+    throw new BadRequestException('Horario invalido.');
   }
 
   const from = input.from ?? new Date();
@@ -46,16 +47,19 @@ export function computeNextRunAt(input: {
     const candidate = startDate ? new Date(startDate) : new Date(base);
     if (!startDate) {
       candidate.setHours(parsedTime.hour, parsedTime.minute, 0, 0);
+    }
+
+    if (input.frequency === ScheduleFrequency.once) {
       if (candidate <= from) {
-        candidate.setDate(candidate.getDate() + 1);
+        throw new BadRequestException('Agendamento de uma vez deve estar no futuro.');
       }
+
+      return candidate;
     }
 
-    if (input.frequency === ScheduleFrequency.once && candidate <= from) {
-      throw new Error('Agendamento de uma vez deve estar no futuro.');
-    }
-
-    if (input.frequency === ScheduleFrequency.daily && candidate <= from) {
+    // Avança quantos dias forem necessários: com startDate no passado, um único
+    // incremento devolvia nextRunAt no passado e a tarefa disparava em loop.
+    while (candidate <= from) {
       candidate.setDate(candidate.getDate() + 1);
     }
 
@@ -66,10 +70,11 @@ export function computeNextRunAt(input: {
     if (
       input.dayOfWeek === undefined ||
       input.dayOfWeek === null ||
+      !Number.isInteger(input.dayOfWeek) ||
       input.dayOfWeek < 0 ||
       input.dayOfWeek > 6
     ) {
-      throw new Error('Dia da semana invalido.');
+      throw new BadRequestException('Dia da semana invalido.');
     }
 
     const candidate = new Date(base);
@@ -88,10 +93,11 @@ export function computeNextRunAt(input: {
   if (
     input.dayOfMonth === undefined ||
     input.dayOfMonth === null ||
+    !Number.isInteger(input.dayOfMonth) ||
     input.dayOfMonth < 1 ||
     input.dayOfMonth > 31
   ) {
-    throw new Error('Dia do mes invalido.');
+    throw new BadRequestException('Dia do mes invalido.');
   }
 
   let year = base.getFullYear();
@@ -119,6 +125,32 @@ export function computeNextRunAt(input: {
       year += 1;
     }
   }
+}
+
+export function computeNextRunAtMultiple(input: {
+  frequency: ScheduleFrequency;
+  timesOfDay: string[];
+  startDate?: Date | null;
+  dayOfWeek?: number | null;
+  dayOfMonth?: number | null;
+  from?: Date;
+}): Date {
+  const { timesOfDay, ...rest } = input;
+  const candidates = timesOfDay
+    .map((timeOfDay) => {
+      try {
+        return computeNextRunAt({ ...rest, timeOfDay });
+      } catch {
+        return null;
+      }
+    })
+    .filter((d): d is Date => d !== null);
+
+  if (candidates.length === 0) {
+    throw new BadRequestException('Nenhum horário válido encontrado.');
+  }
+
+  return candidates.reduce((min, d) => (d < min ? d : min));
 }
 
 export function frequencyLabel(value: ScheduleFrequency) {

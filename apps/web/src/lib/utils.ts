@@ -1,5 +1,12 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import type {
+  AutomationRequestCadence,
+  AutomationRequestStatus,
+  AutomationRequestUrgency,
+  SiteCategory,
+  SiteStatus,
+} from './types';
 
 type StatusVariant =
   | 'default'
@@ -8,7 +15,9 @@ type StatusVariant =
   | 'queued'
   | 'error'
   | 'canceled'
-  | 'muted';
+  | 'muted'
+  | 'warning'
+  | 'danger';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -41,6 +50,28 @@ export function statusVariant(status: string): StatusVariant {
   return variants[status] ?? 'muted';
 }
 
+export function siteStatusLabel(status: SiteStatus) {
+  return {
+    online: 'Online',
+    maintenance: 'Manutenção',
+    down: 'Fora do ar',
+  }[status];
+}
+
+export function siteStatusVariant(status: SiteStatus): StatusVariant {
+  const variants: Record<SiteStatus, StatusVariant> = {
+    online: 'success',
+    maintenance: 'warning',
+    down: 'danger',
+  };
+
+  return variants[status];
+}
+
+export function siteCategoryLabel(category: SiteCategory) {
+  return { sistema: 'Sistema', bi: 'BI' }[category];
+}
+
 export function initialsFor(name: string) {
   return name
     .split(' ')
@@ -50,18 +81,24 @@ export function initialsFor(name: string) {
     .join('');
 }
 
-export function departmentLabel(value: string) {
-  return {
-    pessoal: 'Pessoal',
-    fiscal: 'Fiscal',
-    contabil: 'Contábil',
-    tecnologia: 'Tecnologia',
-    inovacao: 'Inovação',
-    legalizacao: 'Legalização',
-    certificacao: 'Certificação',
-    auditoria: 'Auditoria',
-    rh: 'RH',
-  }[value] ?? value;
+const DEPT_LABEL_FALLBACK: Record<string, string> = {
+  pessoal: 'Pessoal',
+  fiscal: 'Fiscal',
+  contabil: 'Contábil',
+  tecnologia: 'Tecnologia',
+  inovacao: 'Inovação',
+  legalizacao: 'Legalização',
+  certificacao: 'Certificação',
+  auditoria: 'Auditoria',
+  rh: 'RH',
+};
+
+export function departmentLabel(value: string, departments?: Array<{ slug: string; name: string }>) {
+  if (departments) {
+    const found = departments.find((d) => d.slug === value);
+    if (found) return found.name;
+  }
+  return DEPT_LABEL_FALLBACK[value] ?? value;
 }
 
 export function userFileName(value?: string | null) {
@@ -69,6 +106,20 @@ export function userFileName(value?: string | null) {
   const clean = value.trim();
   const withoutPrefixes = clean.replace(/^(?:\d{13}-[a-z0-9]{6}-)+/i, '');
   return withoutPrefixes || clean;
+}
+
+export function timeAgo(value?: string | null) {
+  if (!value) return 'Nunca verificado';
+
+  const diffMinutes = Math.round((Date.now() - new Date(value).getTime()) / 60_000);
+  if (diffMinutes < 1) return 'Agora mesmo';
+  if (diffMinutes < 60) return `há ${diffMinutes} min`;
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `há ${diffHours}h`;
+
+  const diffDays = Math.round(diffHours / 24);
+  return `há ${diffDays}d`;
 }
 
 export function formatSecondsToHuman(totalSeconds: number) {
@@ -80,5 +131,49 @@ export function formatSecondsToHuman(totalSeconds: number) {
     return `${hours}h ${minutes}min`;
   }
 
+  if (minutes === 0 && seconds > 0) {
+    return `${seconds}s`;
+  }
+
   return `${minutes}min`;
+}
+
+export function automationRequestStatusLabel(status: AutomationRequestStatus) {
+  return {
+    pending: 'Pendente',
+    review: 'Em análise',
+    approved: 'Aprovado',
+    in_progress: 'Em desenvolvimento',
+    done: 'Concluído',
+    rejected: 'Recusado',
+  }[status];
+}
+
+export function automationRequestStatusVariant(status: AutomationRequestStatus): StatusVariant {
+  return {
+    pending: 'warning',
+    review: 'queued',
+    approved: 'success',
+    in_progress: 'running',
+    done: 'success',
+    rejected: 'danger',
+  }[status] as StatusVariant;
+}
+
+export function automationRequestUrgencyLabel(urgency: AutomationRequestUrgency) {
+  return {
+    low: 'Baixa',
+    normal: 'Normal',
+    high: 'Alta',
+    urgent: 'Urgente',
+  }[urgency];
+}
+
+export function automationRequestCadenceLabel(cadence: AutomationRequestCadence) {
+  return {
+    once: 'Avulsa',
+    daily: 'Diária',
+    weekly: 'Semanal',
+    monthly: 'Mensal',
+  }[cadence];
 }

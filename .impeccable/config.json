@@ -1,0 +1,7 @@
+{
+  "detector": {
+    "ignoreFiles": [
+      "apps/api/src/mail/mail.service.ts"
+    ]
+  }
+}

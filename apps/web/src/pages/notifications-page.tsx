@@ -1,12 +1,13 @@
-import { Bell, CheckCheck, Download, ExternalLink } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Bell, CheckCheck, Download, ExternalLink, Search } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PageHeader, PageHeaderBadge } from '../components/page-header';
+import { PageHeader } from '../components/page-header';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Input } from '../components/ui/input';
 import { useHub } from '../contexts/hub-context';
-import { api, downloadFile } from '../lib/api';
+import { api, downloadWithFeedback } from '../lib/api';
 import type { Notification } from '../lib/types';
 import { formatDate } from '../lib/utils';
 import { cn } from '../lib/utils';
@@ -15,6 +16,18 @@ export function NotificationsPage() {
   const { notify, refreshUnreadCount } = useHub();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+
+  const filteredNotifications = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return notifications;
+    return notifications.filter(
+      (n) =>
+        n.title.toLowerCase().includes(term) ||
+        (n.body ?? '').toLowerCase().includes(term) ||
+        (n.execution?.robot.name ?? '').toLowerCase().includes(term),
+    );
+  }, [notifications, query]);
 
   useEffect(() => {
     void load();
@@ -58,17 +71,10 @@ export function NotificationsPage() {
   const unread = notifications.filter((n) => !n.isRead).length;
 
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-1 gap-5">
       <PageHeader
-        eyebrow="Inbox"
-        title={
-          <>
-            Notificações{' '}
-            <span className="text-sky-600 dark:text-sky-400">de resultados</span>
-          </>
-        }
+        title={<>Notificações de <span className="text-sky-600 dark:text-sky-400">resultados</span></>}
         description="Notificações de agendamentos configurados para você. Clique para marcar como lida e baixar os arquivos."
-        badge={unread > 0 ? <PageHeaderBadge>{unread} não lidas</PageHeaderBadge> : undefined}
         actions={
           unread > 0 ? (
             <Button variant="outline" onClick={() => void markAllRead()}>
@@ -79,19 +85,38 @@ export function NotificationsPage() {
         }
       />
 
+      <div className="relative w-full sm:max-w-sm">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Input
+          className="h-10 pl-9"
+          placeholder="Buscar notificação..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+
       {loading ? (
-        <div className="py-16 text-center text-sm text-slate-500">Carregando notificações...</div>
+        <div role="status" aria-live="polite" className="grid grid-cols-1 animate-pulse gap-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 rounded-3xl bg-slate-100 dark:bg-slate-800/50" />
+          ))}
+        </div>
       ) : notifications.length === 0 ? (
         <div className="py-16 text-center">
-          <Bell className="mx-auto mb-4 h-10 w-10 text-slate-300 dark:text-slate-600" />
+          <Bell className="mx-auto mb-4 h-10 w-10 text-slate-300 dark:text-zinc-600" />
           <p className="text-sm text-slate-500">Nenhuma notificação ainda.</p>
           <p className="text-xs text-slate-400 mt-1">
             Notificações aparecem quando agendamentos enviarem resultados para você.
           </p>
         </div>
+      ) : filteredNotifications.length === 0 ? (
+        <div className="py-16 text-center">
+          <Bell className="mx-auto mb-4 h-10 w-10 text-slate-300 dark:text-zinc-600" />
+          <p className="text-sm text-slate-500">Nenhuma notificação encontrada para esta busca.</p>
+        </div>
       ) : (
-        <div className="grid gap-3">
-          {notifications.map((notification) => (
+        <div className="grid grid-cols-1 gap-3">
+          {filteredNotifications.map((notification) => (
             <NotificationCard
               key={notification.id}
               notification={notification}
@@ -111,6 +136,7 @@ function NotificationCard({
   notification: Notification;
   onMarkRead: () => void;
 }) {
+  const { notify } = useHub();
   const isError = notification.type === 'execution_error';
   const outputFiles = notification.execution?.files ?? [];
 
@@ -148,7 +174,8 @@ function NotificationCard({
           {outputFiles.map((file) => (
             <button
               key={file.id}
-              onClick={() => { onMarkRead(); void downloadFile(file.downloadUrl, file.downloadName ?? 'arquivo'); }}
+              type="button"
+              onClick={() => { onMarkRead(); void downloadWithFeedback(file.downloadUrl, file.downloadName ?? 'arquivo', notify); }}
               className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-[#2b2b31] dark:bg-[#111113] dark:text-zinc-200 dark:hover:bg-[#18181b]"
             >
               <Download className="h-3.5 w-3.5 text-slate-400" />

@@ -6,13 +6,13 @@ import {
 } from '@nestjs/common';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Department, Prisma, RecipientScope, ScheduleFrequency, type ScheduledTask, type User } from '@prisma/client';
+import { Prisma, RecipientScope, ScheduleFrequency, type ScheduledTask, type User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { canAccessRobot, isAdmin, isManager, COMPANY_DEPARTMENTS } from '../shared/access';
+import { canAccessRobot, isAdmin, isManager } from '../shared/access';
 import { ExecutionsService } from '../executions/executions.service';
 import { listFilesRecursively, sanitizeFileName, uniqueStoredFileName } from '../shared/files';
 import { ensureScheduleDirs, scheduleInputDir, scheduleRoot } from '../shared/storage';
-import { computeNextRunAt, parseTimeOfDay } from './schedule-utils';
+import { computeNextRunAt, computeNextRunAtMultiple, parseTimeOfDay } from './schedule-utils';
 
 type SaveTaskInput = {
   id?: string;
@@ -20,6 +20,7 @@ type SaveTaskInput = {
   robotId?: string;
   frequency?: string;
   timeOfDay?: string;
+  timesOfDay?: string[];
   startDate?: string;
   dayOfWeek?: number | null;
   dayOfMonth?: number | null;
@@ -29,6 +30,9 @@ type SaveTaskInput = {
   recipientScope?: string;
   recipientDepartments?: string[];
   recipientUserIds?: string[];
+  creditMode?: string;
+  creditUserIds?: string[];
+  creditDepartment?: string;
 };
 
 type UploadedFile = {
@@ -101,18 +105,59 @@ export class ScheduledTasksService {
     const name = input.name?.trim();
     const robotId = input.robotId?.trim();
     const frequency = parseFrequency(input.frequency);
-    const timeOfDay = input.timeOfDay?.trim();
     const startDate = parseStartDate(input.startDate);
 
-    if (!name || !robotId || !frequency || !timeOfDay) {
-      throw new BadRequestException('Nome, robô, frequência e horário são obrigatórios.');
+    // Suporte a múltiplos horários: timesOfDay tem precedência sobre timeOfDay
+    const rawTimes: string[] = Array.isArray(input.timesOfDay) && input.timesOfDay.length > 0
+      ? input.timesOfDay.map((t) => t.trim()).filter(Boolean)
+      : input.timeOfDay?.trim()
+        ? [input.timeOfDay.trim()]
+        : [];
+
+    if (!name || !robotId || !frequency || rawTimes.length === 0) {
+      throw new BadRequestException('Nome, robô, frequência e pelo menos um horário são obrigatórios.');
     }
 
-    if (!parseTimeOfDay(timeOfDay)) {
-      throw new BadRequestException('Informe um horário válido no formato HH:mm.');
+    const validTimes = rawTimes.filter((t) => parseTimeOfDay(t) !== null);
+    if (validTimes.length === 0) {
+      throw new BadRequestException('Informe horários válidos no formato HH:mm.');
     }
 
-    validateScheduleDateAndTime(startDate, timeOfDay);
+    // Ordena os horários e usa o primeiro como timeOfDay (campo legado)
+    validTimes.sort();
+    const timeOfDay = validTimes[0];
+
+    const existing = input.id
+      ? await this.prisma.scheduledTask.findUnique({
+          where: { id: input.id },
+          include: {
+            user: {
+              select: {
+                id: true,
+                departments: true,
+              },
+            },
+          },
+        })
+      : null;
+
+    if (input.id && !existing) {
+      throw new NotFoundException('Agendamento não encontrado.');
+    }
+    if (existing && !canManageTask(user, existing)) {
+      throw new ForbiddenException('Você não pode editar este agendamento.');
+    }
+
+    // Só valida "data no futuro" quando a data/horário mudou: um agendamento
+    // recorrente antigo tem startDate no passado e ficaria impossível de editar
+    const existingTimes = existing ? (existing.timesOfDay.length > 0 ? existing.timesOfDay : [existing.timeOfDay]) : [];
+    const dateChanged =
+      !existing ||
+      (startDate?.getTime() ?? null) !== (existing.startDate?.getTime() ?? null) ||
+      JSON.stringify(validTimes) !== JSON.stringify(existingTimes.slice().sort());
+    if (dateChanged) {
+      validateScheduleDateAndTime(startDate, validTimes);
+    }
 
     const robot = await this.prisma.robot.findUnique({ where: { id: robotId } });
     if (!robot || !canAccessRobot(user, robot)) {
@@ -124,13 +169,21 @@ export class ScheduledTasksService {
     };
     const hasRequiredFiles = (schema.fileInputs ?? []).some((file) => file?.required);
 
-    const nextRunAt = computeNextRunAt({
-      frequency,
-      timeOfDay,
-      startDate,
-      dayOfWeek: input.dayOfWeek ?? null,
-      dayOfMonth: input.dayOfMonth ?? null,
-    });
+    const nextRunAt = validTimes.length > 1
+      ? computeNextRunAtMultiple({
+          frequency,
+          timesOfDay: validTimes,
+          startDate,
+          dayOfWeek: input.dayOfWeek ?? null,
+          dayOfMonth: input.dayOfMonth ?? null,
+        })
+      : computeNextRunAt({
+          frequency,
+          timeOfDay,
+          startDate,
+          dayOfWeek: input.dayOfWeek ?? null,
+          dayOfMonth: input.dayOfMonth ?? null,
+        });
 
     const { recipientScope, recipientDepartments, recipientUserIds } =
       parseRecipients(user, input);
@@ -141,6 +194,7 @@ export class ScheduledTasksService {
       userId: user.id,
       frequency,
       timeOfDay,
+      timesOfDay: validTimes,
       startDate,
       dayOfWeek:
         frequency === ScheduleFrequency.weekly ? normalizeWeekday(input.dayOfWeek) : null,
@@ -154,35 +208,36 @@ export class ScheduledTasksService {
       recipientScope,
       recipientDepartments,
       recipientUserIds,
+      creditMode: ['creator', 'users', 'department'].includes(input.creditMode ?? '')
+        ? input.creditMode!
+        : 'creator',
+      creditUserIds: input.creditUserIds ?? [],
+      creditDepartment: input.creditDepartment?.trim() || null,
     };
 
-    if (input.id) {
-      const existing = await this.prisma.scheduledTask.findUnique({
-        where: { id: input.id },
-        include: {
-          user: {
-            select: {
-              id: true,
-              departments: true,
-            },
-          },
-        },
-      });
-
-      if (!existing) {
-        throw new NotFoundException('Agendamento não encontrado.');
-      }
-
-      if (!canManageTask(user, existing)) {
-        throw new ForbiddenException('Você não pode editar este agendamento.');
-      }
-
+    if (existing) {
       await this.persistTemplateFiles(existing.id, uploadedFiles);
       await this.ensureRequiredTemplates(existing.id, hasRequiredFiles);
 
       return this.prisma.scheduledTask.update({
-        where: { id: input.id },
-        data: payload,
+        where: { id: existing.id },
+        data: {
+          ...payload,
+          // Edição não transfere a propriedade para quem editou
+          userId: existing.userId,
+          // Editor não-admin não pode (nem sem querer) apagar os destinatários
+          // configurados por um admin
+          ...(isAdmin(user)
+            ? {}
+            : {
+                recipientScope: existing.recipientScope,
+                recipientDepartments: existing.recipientDepartments,
+                recipientUserIds: existing.recipientUserIds,
+                creditMode: existing.creditMode,
+                creditUserIds: existing.creditUserIds,
+                creditDepartment: existing.creditDepartment,
+              }),
+        },
         include: {
           robot: true,
           user: {
@@ -195,6 +250,14 @@ export class ScheduledTasksService {
           },
         },
       });
+    }
+
+    // Valida os arquivos obrigatórios ANTES de criar: validar depois deixava
+    // um agendamento órfão ativo no banco quando o upload faltava
+    if (hasRequiredFiles && !uploadedFiles.some((file) => file.buffer && file.buffer.length > 0)) {
+      throw new BadRequestException(
+        'Esta automação exige upload obrigatório. Envie os arquivos base no agendamento.',
+      );
     }
 
     const created = await this.prisma.scheduledTask.create({
@@ -213,7 +276,6 @@ export class ScheduledTasksService {
     });
 
     await this.persistTemplateFiles(created.id, uploadedFiles);
-    await this.ensureRequiredTemplates(created.id, hasRequiredFiles);
 
     return created;
   }
@@ -271,17 +333,34 @@ export class ScheduledTasksService {
       return;
     }
 
-    const nextRunAt =
-      task.frequency === ScheduleFrequency.once
-        ? task.nextRunAt
-        : computeNextRunAt({
-            frequency: task.frequency,
-            timeOfDay: task.timeOfDay,
-            startDate: task.startDate,
-            dayOfWeek: task.dayOfWeek,
-            dayOfMonth: task.dayOfMonth,
-            from: new Date(task.nextRunAt.getTime() + 1000),
-          });
+    let nextRunAt: Date;
+    if (task.frequency === ScheduleFrequency.once) {
+      nextRunAt = task.nextRunAt;
+    } else {
+      const times = task.timesOfDay.length > 0 ? task.timesOfDay : [task.timeOfDay];
+      try {
+        const from = new Date(task.nextRunAt.getTime() + 1000);
+        nextRunAt = times.length > 1
+          ? computeNextRunAtMultiple({
+              frequency: task.frequency,
+              timesOfDay: times,
+              startDate: task.startDate,
+              dayOfWeek: task.dayOfWeek,
+              dayOfMonth: task.dayOfMonth,
+              from,
+            })
+          : computeNextRunAt({
+              frequency: task.frequency,
+              timeOfDay: times[0],
+              startDate: task.startDate,
+              dayOfWeek: task.dayOfWeek,
+              dayOfMonth: task.dayOfMonth,
+              from,
+            });
+      } catch {
+        nextRunAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      }
+    }
 
     try {
       const templateFiles = await this.loadTemplateFiles(task.id);
@@ -400,7 +479,13 @@ function parseFrequency(value?: string) {
 }
 
 function normalizeWeekday(value?: number | null) {
-  if (value === undefined || value === null || value < 0 || value > 6) {
+  if (
+    value === undefined ||
+    value === null ||
+    !Number.isFinite(value) ||
+    value < 0 ||
+    value > 6
+  ) {
     throw new BadRequestException('Selecione um dia da semana válido.');
   }
 
@@ -408,7 +493,13 @@ function normalizeWeekday(value?: number | null) {
 }
 
 function normalizeMonthDay(value?: number | null) {
-  if (value === undefined || value === null || value < 1 || value > 31) {
+  if (
+    value === undefined ||
+    value === null ||
+    !Number.isFinite(value) ||
+    value < 1 ||
+    value > 31
+  ) {
     throw new BadRequestException('Selecione um dia do mês entre 1 e 31.');
   }
 
@@ -462,10 +553,12 @@ function parseStartDate(value?: string) {
 
 function parseRecipients(user: User, input: SaveTaskInput) {
   if (!isAdmin(user)) {
+    // Ao menos o próprio criador recebe as notificações do resultado
+    // (lista vazia = ninguém era notificado, silenciosamente)
     return {
       recipientScope: RecipientScope.specific,
-      recipientDepartments: [] as Department[],
-      recipientUserIds: [] as string[],
+      recipientDepartments: [] as string[],
+      recipientUserIds: [user.id],
     };
   }
 
@@ -474,7 +567,7 @@ function parseRecipients(user: User, input: SaveTaskInput) {
     : RecipientScope.specific;
 
   const recipientDepartments = (input.recipientDepartments ?? []).filter(
-    (d): d is Department => COMPANY_DEPARTMENTS.includes(d as Department),
+    (d): d is string => typeof d === 'string' && d.trim().length > 0,
   );
 
   const recipientUserIds = Array.isArray(input.recipientUserIds)
@@ -484,7 +577,7 @@ function parseRecipients(user: User, input: SaveTaskInput) {
   return { recipientScope: scope, recipientDepartments, recipientUserIds };
 }
 
-function validateScheduleDateAndTime(startDate: Date | null, timeOfDay: string) {
+function validateScheduleDateAndTime(startDate: Date | null, timesOfDay: string[]) {
   if (!startDate) {
     return;
   }
@@ -496,12 +589,15 @@ function validateScheduleDateAndTime(startDate: Date | null, timeOfDay: string) 
   }
 
   if (startDate.getTime() === today.getTime()) {
-    const [hour, minute] = timeOfDay.split(':').map(Number);
-    const scheduled = new Date(now);
-    scheduled.setHours(hour, minute, 0, 0);
-    if (scheduled <= now) {
+    const anyFuture = timesOfDay.some((t) => {
+      const [hour, minute] = t.split(':').map(Number);
+      const scheduled = new Date(now);
+      scheduled.setHours(hour, minute, 0, 0);
+      return scheduled > now;
+    });
+    if (!anyFuture) {
       throw new BadRequestException(
-        'Para o dia atual, o horário precisa ser maior que o horário atual.',
+        'Para o dia atual, pelo menos um horário de disparo precisa ser futuro.',
       );
     }
   }

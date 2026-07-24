@@ -1,0 +1,200 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-01T00:00:00Z",
+  "title": "Design System: Automation HUB",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Azul Operacional",
+        "canonical": "#0ea5e9",
+        "tonalRamp": ["#082f49", "#0c4a6e", "#0369a1", "#0284c7", "#0ea5e9", "#38bdf8", "#bae6fd", "#e0f2fe"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Tinta",
+        "canonical": "#0f172a",
+        "tonalRamp": ["#020617", "#0f172a", "#1e293b", "#334155", "#475569", "#64748b", "#cbd5e1", "#f1f5f9"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Superfície",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#1e293b", "#334155", "#64748b", "#94a3b8", "#cbd5e1", "#e2e8f0", "#f1f5f9", "#ffffff"]
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "Fundo",
+        "canonical": "#f8fafc",
+        "tonalRamp": ["#020617", "#0f172a", "#1e293b", "#64748b", "#cbd5e1", "#e2e8f0", "#f1f5f9", "#f8fafc"]
+      },
+      "status-success": {
+        "role": "tertiary",
+        "displayName": "Verde Sucesso",
+        "canonical": "#10b981",
+        "tonalRamp": ["#022c22", "#064e3b", "#065f46", "#047857", "#059669", "#10b981", "#6ee7b7", "#d1fae5"]
+      },
+      "status-error": {
+        "role": "tertiary",
+        "displayName": "Âmbar Falha",
+        "canonical": "#f59e0b",
+        "tonalRamp": ["#451a03", "#78350f", "#92400e", "#b45309", "#d97706", "#f59e0b", "#fcd34d", "#fef3c7"]
+      },
+      "status-queued": {
+        "role": "tertiary",
+        "displayName": "Índigo Fila",
+        "canonical": "#6366f1",
+        "tonalRamp": ["#1e1b4b", "#312e81", "#3730a3", "#4338ca", "#4f46e5", "#6366f1", "#a5b4fc", "#e0e7ff"]
+      },
+      "status-canceled": {
+        "role": "tertiary",
+        "displayName": "Rosa Cancelado",
+        "canonical": "#f43f5e",
+        "tonalRamp": ["#4c0519", "#881337", "#be123c", "#e11d48", "#f43f5e", "#fb7185", "#fda4af", "#ffe4e6"]
+      },
+      "bg-deep": {
+        "role": "neutral",
+        "displayName": "Fundo Profundo (dark)",
+        "canonical": "#09090b",
+        "tonalRamp": ["#09090b", "#111113", "#18181b", "#1b1b20", "#27272a", "#2b2b31", "#3f3f46", "#52525b"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display / KPI", "purpose": "Números de métricas em StatCards. Máximo 2-3 por tela." },
+      "title": { "displayName": "Title / Card", "purpose": "Títulos de cards e seções de conteúdo." },
+      "body": { "displayName": "Body", "purpose": "Texto de trabalho — células de tabela, descrições, formulários." },
+      "label": { "displayName": "Label / Meta", "purpose": "Cabeçalhos de tabela, rótulos de campo, badges." }
+    },
+    "shadows": [
+      { "name": "overlay", "value": "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)", "purpose": "Exclusivo para overlays flutuantes: dropdown de perfil, modais, popovers. Nunca em cards." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Transições de cor e estado (hover, focus). Usado em todos os botões e nav items." },
+      { "name": "duration-sidebar", "value": "200ms", "purpose": "Transição de largura do sidebar colapsável." },
+      { "name": "duration-progress", "value": "transition-[width]", "purpose": "Barra de progresso de execução — transição na prop width." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botão Primário",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ação principal da tela. Máximo 1 por viewport. Fundo quase-preto, texto branco.",
+      "html": "<button class=\"ds-btn-primary\">Abrir catálogo <svg class=\"ds-btn-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 8px; background: #0f172a; color: #ffffff; height: 40px; padding: 0 16px; border: none; border-radius: 12px; font-size: 14px; font-weight: 500; font-family: DM Sans, ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { background: #1e293b; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.15); } .ds-btn-primary:disabled { opacity: 0.5; pointer-events: none; } .ds-btn-icon { width: 16px; height: 16px; flex-shrink: 0; }"
+    },
+    {
+      "name": "Botão Outline",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Ação terciária — 'Ver histórico', 'Cancelar', 'Baixar'.",
+      "html": "<button class=\"ds-btn-outline\">Ver histórico</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; gap: 8px; background: transparent; color: #334155; height: 40px; padding: 0 16px; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 14px; font-weight: 500; font-family: DM Sans, ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s; } .ds-btn-outline:hover { background: #f1f5f9; } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.15); } .ds-btn-outline:disabled { opacity: 0.5; pointer-events: none; }"
+    },
+    {
+      "name": "Botão Danger",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Ações destrutivas exclusivamente — cancelar execução, remover robô.",
+      "html": "<button class=\"ds-btn-danger\">Cancelar execução</button>",
+      "css": ".ds-btn-danger { display: inline-flex; align-items: center; gap: 8px; background: #f43f5e; color: #ffffff; height: 40px; padding: 0 16px; border: none; border-radius: 12px; font-size: 14px; font-weight: 500; font-family: DM Sans, ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-danger:hover { background: #fb7185; } .ds-btn-danger:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(244, 63, 94, 0.2); } .ds-btn-danger:disabled { opacity: 0.5; pointer-events: none; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Container de conteúdo principal. Sem sombra, borda discreta.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-header\"><h2 class=\"ds-card-title\">Execuções recentes</h2><p class=\"ds-card-desc\">Visão rápida das últimas execuções do seu escopo.</p></div><div class=\"ds-card-content\"><p class=\"ds-card-body\">Conteúdo do card aqui.</p></div></div>",
+      "css": ".ds-card { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 22px; } .ds-card-header { padding: 24px 24px 0; display: grid; gap: 6px; } .ds-card-content { padding: 24px; } .ds-card-title { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; color: #0f172a; font-family: DM Sans, ui-sans-serif, system-ui, sans-serif; } .ds-card-desc { margin: 0; font-size: 14px; color: #64748b; font-family: DM Sans, ui-sans-serif, system-ui, sans-serif; } .ds-card-body { margin: 0; font-size: 14px; color: #0f172a; font-family: DM Sans, ui-sans-serif, system-ui, sans-serif; }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo de texto padrão. Azul Operacional no foco.",
+      "html": "<div class=\"ds-input-wrap\"><input class=\"ds-input\" type=\"text\" placeholder=\"Buscar automação...\"></div>",
+      "css": ".ds-input-wrap { width: 100%; } .ds-input { display: flex; width: 100%; height: 40px; padding: 0 16px; border: 1px solid #cbd5e1; border-radius: 12px; background: #ffffff; color: #0f172a; font-size: 14px; font-family: DM Sans, ui-sans-serif, system-ui, sans-serif; outline: none; transition: border-color 0.15s, box-shadow 0.15s; box-sizing: border-box; } .ds-input::placeholder { color: #94a3b8; } .ds-input:focus { border-color: #0ea5e9; box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.15); }"
+    },
+    {
+      "name": "Badge Rodando",
+      "kind": "chip",
+      "refersTo": "button-primary",
+      "description": "Status de execução ativa. Sky = Azul Operacional = em andamento.",
+      "html": "<span class=\"ds-badge ds-badge-running\">Rodando</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; border-radius: 8px; padding: 4px 10px; font-size: 11px; font-weight: 500; letter-spacing: 0.02em; border: 1px solid; font-family: DM Sans, ui-sans-serif, system-ui, sans-serif; } .ds-badge-running { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; } .ds-badge-success { background: #d1fae5; color: #065f46; border-color: #6ee7b7; } .ds-badge-error { background: #fef3c7; color: #92400e; border-color: #fcd34d; } .ds-badge-queued { background: #e0e7ff; color: #4338ca; border-color: #a5b4fc; } .ds-badge-canceled { background: #ffe4e6; color: #be123c; border-color: #fda4af; } .ds-badge-muted { background: #f1f5f9; color: #334155; border-color: #e2e8f0; }"
+    },
+    {
+      "name": "Badge Sucesso",
+      "kind": "chip",
+      "refersTo": "button-primary",
+      "description": "Execução concluída com sucesso.",
+      "html": "<span class=\"ds-badge ds-badge-success\">Concluído</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; border-radius: 8px; padding: 4px 10px; font-size: 11px; font-weight: 500; letter-spacing: 0.02em; border: 1px solid; font-family: DM Sans, ui-sans-serif, system-ui, sans-serif; } .ds-badge-success { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }"
+    },
+    {
+      "name": "Progress",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Barra de progresso de execução. Gradiente sky→cyan é a única exceção de gradiente no sistema.",
+      "html": "<div class=\"ds-progress-track\"><div class=\"ds-progress-fill\" style=\"width: 68%\"></div></div>",
+      "css": ".ds-progress-track { height: 16px; background: #f1f5f9; border-radius: 9999px; overflow: hidden; } .ds-progress-fill { height: 100%; background: linear-gradient(to right, #0ea5e9, #22d3ee); border-radius: 9999px; transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); }"
+    },
+    {
+      "name": "StatCard",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Métrica numérica de alto nível. Usar no máximo 3-4 por tela.",
+      "html": "<div class=\"ds-stat-card\"><div class=\"ds-stat-header\"><p class=\"ds-stat-label\">Execuções hoje</p><svg class=\"ds-stat-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polygon points=\"5 3 19 12 5 21 5 3\"/></svg></div><div class=\"ds-stat-value\">24</div><p class=\"ds-stat-footnote\">+3 em relação a ontem</p></div>",
+      "css": ".ds-stat-card { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 22px; padding: 24px; display: grid; gap: 16px; font-family: DM Sans, ui-sans-serif, system-ui, sans-serif; } .ds-stat-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; } .ds-stat-label { margin: 0; font-size: 14px; font-weight: 500; color: #64748b; } .ds-stat-icon { color: #94a3b8; flex-shrink: 0; } .ds-stat-value { font-size: 2.1rem; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; color: #0f172a; } .ds-stat-footnote { margin: 0; font-size: 14px; color: #64748b; }"
+    },
+    {
+      "name": "Nav Item (Sidebar)",
+      "kind": "nav",
+      "refersTo": "button-ghost",
+      "description": "Item de navegação do sidebar. Active com bg slate-100, hover com bg slate-100.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item ds-nav-item--active\" href=\"#\"><svg class=\"ds-nav-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"7\" height=\"9\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"9\" x=\"14\" y=\"12\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"3\" y=\"16\" rx=\"1\"/></svg>Dashboard</a><a class=\"ds-nav-item\" href=\"#\"><svg class=\"ds-nav-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><polygon points=\"10 8 16 12 10 16 10 8\"/></svg>Robôs</a><a class=\"ds-nav-item\" href=\"#\"><svg class=\"ds-nav-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9\"/><path d=\"M10.3 21a1.94 1.94 0 0 0 3.4 0\"/></svg>Histórico</a></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; gap: 4px; padding: 4px; } .ds-nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; font-size: 14px; font-weight: 500; color: #475569; text-decoration: none; transition: background 0.15s, color 0.15s; font-family: DM Sans, ui-sans-serif, system-ui, sans-serif; } .ds-nav-item:hover { background: #f1f5f9; color: #0f172a; } .ds-nav-item--active { background: #f1f5f9; color: #0f172a; } .ds-nav-icon { width: 16px; height: 16px; flex-shrink: 0; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "A Sala de Operações",
+    "overview": "O Automation HUB é o centro de controle de uma operação real. Gestores abrem o painel durante o expediente, em salas com luz de escritório, procurando respostas rápidas: o que está rodando, quem solicitou, deu certo? O design serve essa pergunta. Cada tela tem uma resposta principal — tudo que não ajuda a respondê-la é ruído e deve ser removido.\n\nO sistema é neutro por padrão. Fundo off-white, texto quase-preto, superfícies brancas, bordas discretas para separar sem gritar. A cor entra apenas quando tem significado: azul operacional para ações e status ativos, verde para sucesso, âmbar para falha, índigo para fila, rosa para cancelado.\n\nO vocabulário visual é familiar deliberadamente. Tabelas, cards, formulários, sidebar — padrões que qualquer funcionário de escritório reconhece sem treinamento.",
+    "keyCharacteristics": [
+      "Neutro por padrão — cor carrega significado, nunca decoração",
+      "Uma pergunta por tela — hierarquia de conteúdo, não de decoração",
+      "Familiaridade primeiro — padrões que o não-técnico reconhece",
+      "Densidade sem ruído — informação compacta, não espaço vazio nem sobrecarga",
+      "Flat por eleição — bordas fazem o trabalho de separação, sombras são exceção"
+    ],
+    "rules": [
+      { "name": "The Signal Rule", "body": "Cor carrega significado operacional. Uma tela com muito azul ou verde não é uma tela bem projetada — é uma tela cheia de eventos inesperados. O estado calmo do sistema é cinza.", "section": "colors" },
+      { "name": "The Status Trio Rule", "body": "Cada status usa seu trio completo (texto / fundo / borda). Nunca use o texto de sucesso no fundo de erro. Os trios são autocontidos.", "section": "colors" },
+      { "name": "The Weight Rule", "body": "A hierarquia é estabelecida por peso (400/500/600) e tamanho, nesta ordem. Não adicionar novo peso ou família para criar contraste.", "section": "typography" },
+      { "name": "The Legibility Rule", "body": "Nenhum texto de conteúdo real usa tinta-fantasma (#94a3b8) como cor. Tinta-suave (#64748b) é o limite inferior para texto secundário.", "section": "typography" },
+      { "name": "The Border Rule", "body": "Separação entre superfícies é feita por bordas. Sombra é reservada para elementos que literalmente estão em cima de outros (overlays, popovers). Se você sente vontade de adicionar box-shadow a um card, o problema é provavelmente falta de borda.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do reservar cor para significado: Azul Operacional para ações e status 'rodando', trios semânticos para cada ExecutionStatus.",
+      "Do usar bordas para separação de superfícies — border-slate-300 (light) / border-[#27272a] (dark).",
+      "Do manter rounded-[22px] em cards e rounded-xl em botões/inputs.",
+      "Do usar tabelas para listagens de mais de 3-4 itens.",
+      "Do aplicar text-wrap: balance em títulos de cards e headings de página.",
+      "Do garantir que texto em text-slate-500 seja sempre secundário — rótulos, datas, emails."
+    ],
+    "donts": [
+      "Don't usar gradientes decorativos, glows, ou background-clip: text. O único gradiente aceito é a barra de progresso.",
+      "Don't criar card-grids com ícone + título + texto idênticos repetidos.",
+      "Don't usar border-left ou border-right maior que 1px como acento colorido.",
+      "Don't adicionar sombra a cards em repouso. shadow-none é a intenção.",
+      "Don't usar o Azul Operacional como fundo de superfície ampla ou cor decorativa.",
+      "Don't criar efeitos glassmorphism (blur + transparência em cards).",
+      "Don't criar dashboards de KPI com múltiplas métricas e gráficos por toda parte.",
+      "Don't usar eyebrow labels (text-xs uppercase tracking-wide) fora do sidebar."
+    ]
+  }
+}

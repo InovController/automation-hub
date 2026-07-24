@@ -11,6 +11,8 @@ import {
 import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import { AuthService } from '../auth/auth.service';
+import { isAdmin } from '../shared/access';
+import { diskUploadLimits } from '../shared/upload';
 import { ExecutionRunnerService } from './execution-runner.service';
 import { ExecutionsService } from './executions.service';
 
@@ -19,6 +21,7 @@ type UploadedFile = {
   mimetype?: string;
   size?: number;
   buffer?: Buffer;
+  path?: string;
 };
 
 @Controller('executions')
@@ -42,7 +45,7 @@ export class ExecutionsController {
   }
 
   @Post()
-  @UseInterceptors(AnyFilesInterceptor())
+  @UseInterceptors(AnyFilesInterceptor(diskUploadLimits))
   async createExecution(
     @Req() request: Request,
     @Body() body: Record<string, string | undefined>,
@@ -51,12 +54,20 @@ export class ExecutionsController {
     const user = await this.authService.requireUser(request);
     const parameters = parseParameters(body.parameters);
 
+    // Priority vem do cliente: só admin pode furar a fila, e sempre saneado
+    // (Number('abc') = NaN quebraria o Prisma com 500)
+    const rawPriority = Number(body.priority ?? 0);
+    const priority =
+      isAdmin(user) && Number.isFinite(rawPriority)
+        ? Math.max(0, Math.min(100, Math.round(rawPriority)))
+        : 0;
+
     return this.executionsService.createExecution(
       body.robotId ?? '',
       {
         userId: user.id,
         notes: body.notes,
-        priority: Number(body.priority ?? 0),
+        priority,
         parameters,
       },
       files,
@@ -70,6 +81,13 @@ export class ExecutionsController {
     await this.executionRunnerService.stopExecution(id);
     await this.executionsService.log(id, 'warn', 'Execução cancelada pelo usuário.');
     return execution;
+  }
+
+  @Post(':id/retry')
+  async retryExecution(@Param('id') id: string, @Req() request: Request) {
+    const user = await this.authService.requireUser(request);
+    this.authService.ensureAdmin(user);
+    return this.executionsService.retry(id, user);
   }
 }
 

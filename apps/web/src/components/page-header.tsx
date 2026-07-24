@@ -8,7 +8,7 @@ export function PageHeader({
   badge,
   actions,
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   title: ReactNode;
   description?: string;
   badge?: ReactNode;
@@ -17,14 +17,16 @@ export function PageHeader({
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div className="space-y-2">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{eyebrow}</div>
+        {eyebrow ? (
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-zinc-400">{eyebrow}</div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-[1.8rem] font-semibold tracking-tight text-slate-950 dark:text-white sm:text-[2.05rem]">
             {title}
           </h1>
           {badge ? badge : null}
         </div>
-        {description ? <p className="max-w-3xl text-sm text-slate-500 dark:text-slate-400">{description}</p> : null}
+        {description ? <p className="max-w-3xl text-sm text-slate-500 dark:text-zinc-400">{description}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
     </div>

@@ -5,16 +5,30 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { Request } from 'express';
+import { ExecutionIdentitiesService } from '../execution-identities/execution-identities.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { normalizeDepartments } from '../shared/access';
+import { effectiveRole, isAdmin, normalizeDepartments } from '../shared/access';
+import {
+  departmentsForAthenasLogin,
+  formatAthenasPersonName,
+} from '../shared/athenas-identity';
+import { hashToken } from '../shared/crypto';
+import { AthenasService } from './athenas.service';
 
 const SESSION_TTL_DAYS = 7;
+const SSO_TTL_MS = 30_000;
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly ssoTokens = new Map<string, { userId: string; expiresAt: number }>();
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly athenas: AthenasService,
+    private readonly identities: ExecutionIdentitiesService,
+  ) {}
 
   async register(input: {
     name?: string;
@@ -45,33 +59,105 @@ export class AuthService {
     }
 
     const userCount = await this.prisma.user.count();
+    const isBootstrap = userCount === 0;
 
+    // Contas novas nascem inativas: sem aprovação, qualquer pessoa na rede
+    // poderia se registrar escolhendo os próprios departamentos e ganhar
+    // acesso a robôs restritos. O primeiro usuário é o bootstrap de admin.
     const user = await this.prisma.user.create({
       data: {
         name,
         email,
         passwordHash: hashPassword(password),
-        role: userCount === 0 ? UserRole.admin : UserRole.employee,
+        role: isBootstrap ? UserRole.admin : UserRole.employee,
         departments,
+        isActive: isBootstrap,
       },
     });
+
+    if (!isBootstrap) {
+      return {
+        pendingApproval: true as const,
+        message: 'Conta criada. Aguarde um administrador aprovar seu acesso.',
+      };
+    }
 
     return this.createSession(user.id);
   }
 
-  async login(input: { email?: string; password?: string }) {
-    const email = input.email?.trim().toLowerCase();
+  async login(input: { login?: string; email?: string; password?: string }) {
+    const rawLogin = (input.login ?? input.email)?.trim();
     const password = input.password?.trim();
 
-    if (!email || !password) {
-      throw new BadRequestException('Email e senha são obrigatórios.');
+    if (!rawLogin || !password) {
+      throw new BadRequestException('Usuário e senha são obrigatórios.');
     }
 
+    // Athenas path: logins sem @ (ex: JOAO.SILVA) quando integração está ligada
+    if (!rawLogin.includes('@') && this.athenas.isEnabled()) {
+      const result = await this.athenas.authenticate(rawLogin, password);
+      if (!result.ok) {
+        throw new UnauthorizedException('Credenciais inválidas.');
+      }
+
+      const athenasLogin = rawLogin.toUpperCase();
+      const departments = departmentsForAthenasLogin(athenasLogin);
+
+      // Nome: usa NOME do Athenas; fallback para login capitalizado
+      const name = result.nome
+        ? formatAthenasPersonName(result.nome)
+        : formatAthenasPersonName(athenasLogin.replace(/\./g, ' '));
+
+      let user = await this.prisma.user.findUnique({ where: { athenasLogin } });
+
+      if (!user) {
+        const email = `${rawLogin.toLowerCase()}@athenas.local`;
+        user = await this.prisma.user.create({
+          data: {
+            name,
+            email,
+            athenasLogin,
+            passwordHash: hashPassword(randomBytes(32).toString('hex')),
+            role: UserRole.employee,
+            departments,
+            isActive: true,
+          },
+        });
+      } else {
+        // Sincroniza nome e departamento a cada login (Athenas é a fonte de verdade)
+        const updates: Record<string, unknown> = {};
+        if (name && user.name !== name) updates.name = name;
+        if (departments.length > 0 && JSON.stringify(user.departments) !== JSON.stringify(departments)) {
+          updates.departments = departments;
+        }
+        if (Object.keys(updates).length > 0) {
+          user = await this.prisma.user.update({ where: { id: user.id }, data: updates });
+        }
+      }
+
+      if (!user.isActive) {
+        throw new ForbiddenException('Sua conta aguarda aprovação de um administrador.');
+      }
+
+      await this.identities.reconcileUser(user.id);
+      return this.createSession(user.id);
+    }
+
+    // Local path: contas com email (ex: admin@empresa.com)
+    const email = rawLogin.toLowerCase();
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user || !verifyPassword(password, user.passwordHash) || !user.isActive) {
+    // Sempre roda o scrypt (com hash dummy se não existe) para não revelar
+    // por tempo de resposta quais emails estão cadastrados.
+    const passwordOk = verifyPassword(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+    if (!user || !passwordOk) {
       throw new UnauthorizedException('Credenciais inválidas.');
     }
 
+    if (!user.isActive) {
+      throw new ForbiddenException('Sua conta aguarda aprovação de um administrador.');
+    }
+
+    await this.identities.reconcileUser(user.id);
     return this.createSession(user.id);
   }
 
@@ -109,10 +195,28 @@ export class AuthService {
     return session.user;
   }
 
-  ensureAdmin(user: { role: UserRole }) {
-    if (user.role !== UserRole.admin) {
+  ensureAdmin(user: { id: string; role: UserRole; departments: string[] }) {
+    if (!isAdmin(user)) {
       throw new ForbiddenException('Apenas administradores podem executar esta ação.');
     }
+  }
+
+  generateSsoToken(userId: string): string {
+    const token = randomBytes(32).toString('hex');
+    this.ssoTokens.set(token, { userId, expiresAt: Date.now() + SSO_TTL_MS });
+    return token;
+  }
+
+  async verifySsoToken(token: string) {
+    const entry = this.ssoTokens.get(token);
+    if (!entry || Date.now() > entry.expiresAt) {
+      this.ssoTokens.delete(token);
+      return null;
+    }
+    this.ssoTokens.delete(token);
+    const user = await this.prisma.user.findUnique({ where: { id: entry.userId } });
+    if (!user || !user.isActive) return null;
+    return { athenasLogin: user.athenasLogin, name: user.name, email: user.email };
   }
 
   private async createSession(userId: string) {
@@ -144,6 +248,8 @@ function hashPassword(password: string) {
   return `${salt}:${derived}`;
 }
 
+const DUMMY_PASSWORD_HASH = hashPassword(randomBytes(16).toString('hex'));
+
 function verifyPassword(password: string, storedHash: string) {
   const [salt, hash] = storedHash.split(':');
   if (!salt || !hash) {
@@ -157,10 +263,6 @@ function verifyPassword(password: string, storedHash: string) {
     incomingHash.length === existingHash.length &&
     timingSafeEqual(incomingHash, existingHash)
   );
-}
-
-function hashToken(token: string) {
-  return createHash('sha256').update(token).digest('hex');
 }
 
 function extractBearerToken(request: Request) {
@@ -183,7 +285,7 @@ function sanitizeUser(user: {
     id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
+    role: effectiveRole(user),
     departments: user.departments,
   };
 }

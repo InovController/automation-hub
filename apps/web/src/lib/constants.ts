@@ -1,16 +1,4 @@
-import type { Department, UserRole } from './types';
-
-export const DEPARTMENT_OPTIONS: Array<{ value: Department; label: string }> = [
-  { value: 'pessoal', label: 'Pessoal' },
-  { value: 'fiscal', label: 'Fiscal' },
-  { value: 'contabil', label: 'Contábil' },
-  { value: 'tecnologia', label: 'Tecnologia' },
-  { value: 'inovacao', label: 'Inovação' },
-  { value: 'legalizacao', label: 'Legalização' },
-  { value: 'certificacao', label: 'Certificação' },
-  { value: 'auditoria', label: 'Auditoria' },
-  { value: 'rh', label: 'RH' },
-];
+import type { UserRole } from './types';
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Admin',

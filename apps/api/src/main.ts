@@ -7,6 +7,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import type { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
+import { canAccessStoragePath } from './shared/storage-access';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -15,13 +16,17 @@ async function bootstrap() {
   const legacyPublicDir = join(rootDir, 'public');
   const frontendDir = existsSync(join(webDistDir, 'index.html')) ? webDistDir : legacyPublicDir;
 
+  // Atrás do IIS como reverse proxy, request.ip deve refletir o cliente real
+  // (senão o rate limit de login vale para a empresa inteira somada)
+  app.set('trust proxy', 'loopback');
+
   app.enableCors({
     origin: process.env.ALLOWED_ORIGIN ?? 'http://localhost:5173',
   });
   app.setGlobalPrefix('api', { exclude: ['/'] });
   app.useStaticAssets(frontendDir);
 
-  // Protect storage files: require a valid session before serving
+  // Protect storage files: require a valid session AND access to the resource
   const prisma = app.get(PrismaService);
   app.use('/storage', async (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers['authorization'] ?? '';
@@ -33,12 +38,24 @@ async function bootstrap() {
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const session = await prisma.session.findFirst({
       where: { tokenHash, expiresAt: { gt: new Date() } },
-      include: { user: { select: { isActive: true } } },
+      include: { user: true },
     });
     if (!session || !session.user.isActive) {
       res.status(401).json({ message: 'Sessão inválida ou expirada.' });
       return;
     }
+
+    try {
+      const allowed = await canAccessStoragePath(prisma, session.user, req.path);
+      if (!allowed) {
+        res.status(404).json({ message: 'Arquivo não encontrado.' });
+        return;
+      }
+    } catch {
+      res.status(500).json({ message: 'Falha ao validar acesso ao arquivo.' });
+      return;
+    }
+
     next();
   });
 

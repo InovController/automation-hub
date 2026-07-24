@@ -1,9 +1,8 @@
-import { Activity, LockKeyhole, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { ControllerLogo } from '../components/controller-logo';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Field } from '../components/field';
-import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import {
   Card,
@@ -13,265 +12,169 @@ import {
   CardTitle,
 } from '../components/ui/card';
 import { Input } from '../components/ui/input';
-import { Separator } from '../components/ui/separator';
 import { useAuth } from '../contexts/auth-context';
-import { DEPARTMENT_OPTIONS } from '../lib/constants';
-import type { Department } from '../lib/types';
 
 export function AuthPage() {
-  const { user, bootstrapping, login, register } = useAuth();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const { user, bootstrapping, login } = useAuth();
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    password: '',
-    departments: [] as Department[],
-  });
-
-  const canSubmitRegister = useMemo(
-    () => form.departments.length > 0,
-    [form.departments.length],
-  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [form, setForm] = useState({ login: '', password: '' });
 
   if (!bootstrapping && user) {
     return <Navigate to="/" replace />;
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 dark:bg-[#09090b] sm:px-6 lg:px-8">
-      <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-7xl gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <Card className="order-2 hidden rounded-[32px] border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white shadow-none dark:border-[#3f3f46] dark:from-zinc-800 dark:via-zinc-900 dark:to-zinc-950 lg:block">
-          <CardContent className="flex h-full flex-col justify-between gap-10 p-8 sm:p-10">
-            <div className="space-y-8">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
-                  <ControllerLogo className="h-8 w-8" />
-                </div>
-                <div>
-                  <div className="text-lg font-semibold">Automation HUB</div>
-                  <div className="text-sm text-slate-300">
-                    Plataforma interna da Controller
-                  </div>
-                </div>
-              </div>
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-16 dark:bg-[#09090b] sm:px-6 sm:py-20 lg:px-8">
+      <div className="grid w-full min-w-0 max-w-[70rem] grid-cols-1 gap-6 lg:grid-cols-[0.95fr_1.05fr]">
 
-              <div className="space-y-4">
-                <Badge
-                  className="w-fit border border-white/10 bg-white/10 text-white hover:bg-white/10"
-                  variant="default"
-                >
-                  Operação centralizada
-                </Badge>
-                <h1 className="max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
-                  Execute automações com histórico,{' '}
-                  <span className="text-sky-400">logs reais</span> e{' '}
-                  <span className="text-sky-400">controle de fila</span>.
-                </h1>
-                <p className="max-w-2xl text-base text-slate-300">
-                  Um portal único para disparar robôs, acompanhar conflitos de
-                  execução e distribuir resultados com auditoria.
-                </p>
-              </div>
+        {/* Identidade compacta — visível apenas quando o painel hero está oculto (abaixo de lg) */}
+        <div className="flex min-w-0 items-center gap-3 motion-safe:animate-fade-up lg:hidden">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white dark:bg-white dark:text-zinc-950">
+            <ControllerLogo className="h-6 w-6" />
+          </div>
+          <div>
+            <div className="text-sm font-semibold leading-tight text-slate-950 dark:text-white">
+              Automation HUB
             </div>
+            <div className="text-xs text-slate-500 dark:text-zinc-400">Controller</div>
+          </div>
+        </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
-              <FeatureCard
-                icon={<Activity className="h-5 w-5" />}
-                title="Monitoramento"
-                description="Acompanhe progresso, logs e etapas da execução em tempo real."
-              />
-              <FeatureCard
-                icon={<ShieldCheck className="h-5 w-5" />}
-                title="Governança"
-                description="Controle concorrência, conflitos e recursos compartilhados."
-              />
-              <FeatureCard
-                icon={<LockKeyhole className="h-5 w-5" />}
-                title="Auditoria"
-                description="Registre quem executou, quando rodou e quais arquivos foram gerados."
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="order-1 rounded-[28px] border-slate-300 bg-white dark:border-[#3f3f46] dark:bg-[#18181b] lg:rounded-[32px]">
-          <CardHeader className="space-y-4 p-5 pb-0 sm:p-6 sm:pb-0">
-            <div className="space-y-2">
-              <CardTitle className="text-3xl">
-                {mode === 'login' ? (
-                  <>Entrar na <span className="text-sky-500">conta</span></>
-                ) : (
-                  <>Criar <span className="text-sky-500">conta</span></>
-                )}
-              </CardTitle>
-              <CardDescription>
-                {mode === 'login'
-                  ? 'Use sua conta para acessar o catálogo e iniciar execuções.'
-                  : 'Cadastre um usuário da empresa. Novas contas entram como funcionário até um admin promover.'}
-              </CardDescription>
-            </div>
-
-            <div className="flex rounded-2xl bg-slate-100 p-1 dark:bg-[#27272a]">
-              <button
-                type="button"
-                className={[
-                  'flex-1 rounded-xl px-4 py-2 text-sm font-medium transition',
-                  mode === 'login'
-                    ? 'bg-white text-slate-950 shadow-sm dark:bg-[#3f3f46] dark:text-white'
-                    : 'text-slate-500 dark:text-slate-400',
-                ].join(' ')}
-                onClick={() => setMode('login')}
-              >
-                Login
-              </button>
-              <button
-                type="button"
-                className={[
-                  'flex-1 rounded-xl px-4 py-2 text-sm font-medium transition',
-                  mode === 'register'
-                    ? 'bg-white text-slate-950 shadow-sm dark:bg-[#3f3f46] dark:text-white'
-                    : 'text-slate-500 dark:text-slate-400',
-                ].join(' ')}
-                onClick={() => setMode('register')}
-              >
-                Cadastro
-              </button>
-            </div>
+        {/* Card de login — coluna esquerda */}
+        <Card className="flex min-w-0 flex-col justify-center rounded-[28px] border-slate-300 bg-white shadow-[0_24px_70px_-28px_rgba(15,23,42,0.35)] motion-safe:animate-fade-up dark:border-[#3f3f46] dark:bg-[#18181b] dark:shadow-[0_24px_70px_-28px_rgba(0,0,0,0.6)] lg:rounded-[32px]">
+          <CardHeader className="space-y-1.5 p-7 pb-0 sm:p-9 sm:pb-0">
+            <CardTitle className="text-3xl">Entrar na conta</CardTitle>
+            <CardDescription className="text-sm text-slate-500 dark:text-zinc-400">
+              Use seu login e senha do Athenas para acessar os robôs do seu departamento.
+            </CardDescription>
           </CardHeader>
 
-          <CardContent className="grid gap-5 p-5 sm:p-6">
-            {mode === 'register' ? (
-              <Field label="Nome">
-                <Input
-                  value={form.name}
-                  onChange={(event) =>
-                    setForm({ ...form, name: event.target.value })
-                  }
-                />
-              </Field>
-            ) : null}
-
-            <Field label="Email">
-              <Input
-                type="email"
-                value={form.email}
-                onChange={(event) =>
-                  setForm({ ...form, email: event.target.value })
-                }
-              />
-            </Field>
-
-            <Field label="Senha">
-              <Input
-                type="password"
-                value={form.password}
-                onChange={(event) =>
-                  setForm({ ...form, password: event.target.value })
-                }
-              />
-            </Field>
-
-            {mode === 'register' ? (
-              <Field
-                label="Departamentos"
-                hint="Selecione um ou mais departamentos da Controller."
-              >
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {DEPARTMENT_OPTIONS.map((department) => {
-                    const active = form.departments.includes(department.value);
-
-                    return (
-                      <button
-                        key={department.value}
-                        type="button"
-                        className={[
-                          'rounded-2xl border px-4 py-3 text-left text-sm transition',
-                          active
-                            ? 'border-sky-400 bg-sky-50 text-slate-950 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-white'
-                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-[#3f3f46] dark:bg-[#27272a] dark:text-slate-200 dark:hover:bg-[#3f3f46]',
-                        ].join(' ')}
-                        onClick={() =>
-                          setForm((current) => ({
-                            ...current,
-                            departments: current.departments.includes(
-                              department.value,
-                            )
-                              ? current.departments.filter(
-                                  (item) => item !== department.value,
-                                )
-                              : [...current.departments, department.value],
-                          }))
-                        }
-                      >
-                        {department.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </Field>
-            ) : null}
-
-            <Button
-              className="w-full"
-              disabled={mode === 'register' && !canSubmitRegister}
-              onClick={async () => {
+          <CardContent className="p-7 sm:p-9">
+            <form
+              className="grid grid-cols-1 gap-5"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (isSubmitting) return;
+                setIsSubmitting(true);
+                setError(null);
                 try {
-                  setError(null);
-                  if (mode === 'login') {
-                    await login({ email: form.email, password: form.password });
-                  } else {
-                    await register({
-                      name: form.name,
-                      email: form.email,
-                      password: form.password,
-                      departments: form.departments,
-                    });
-                  }
+                  await login({ login: form.login, password: form.password });
                 } catch (err) {
                   setError(
                     err instanceof Error
                       ? err.message
-                      : 'Não foi possível concluir a ação.',
+                      : 'Não foi possível concluir o login.',
                   );
+                } finally {
+                  setIsSubmitting(false);
                 }
               }}
             >
-              {mode === 'login' ? 'Entrar' : 'Criar conta'}
-            </Button>
+              <Field label="Usuário Athenas">
+                <Input
+                  type="text"
+                  autoComplete="username"
+                  placeholder="Ex: JOAO.SILVA"
+                  autoFocus
+                  required
+                  value={form.login}
+                  onChange={(event) =>
+                    setForm({ ...form, login: event.target.value })
+                  }
+                />
+              </Field>
 
-            {error ? <p className="text-sm text-rose-500">{error}</p> : null}
+              <Field label="Senha">
+                <div className="relative">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    required
+                    className="pr-11"
+                    value={form.password}
+                    onChange={(event) =>
+                      setForm({ ...form, password: event.target.value })
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 transition hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </Field>
 
-            <Separator />
+              {error ? (
+                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-100 px-3.5 py-2.5 text-sm text-amber-700 dark:border-amber-500/40 dark:bg-amber-950 dark:text-amber-200">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              ) : null}
 
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Ao entrar, suas execuções passam a registrar automaticamente nome,
-              email, cargo e histórico da conta.
-            </p>
+              <Button
+                type="submit"
+                className="w-full transition-transform active:scale-[0.98]"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Entrando...
+                  </span>
+                ) : (
+                  'Entrar'
+                )}
+              </Button>
+            </form>
           </CardContent>
         </Card>
-      </div>
-    </div>
-  );
-}
 
-function FeatureCard({
-  icon,
-  title,
-  description,
-}: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
-      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10">
-        {icon}
-      </div>
-      <div className="space-y-2">
-        <div className="font-medium">{title}</div>
-        <p className="text-sm text-slate-300">{description}</p>
+        {/* Painel hero — coluna direita, só em desktop */}
+        <Card
+          className="relative hidden min-w-0 flex-col overflow-hidden rounded-[32px] border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white shadow-[0_30px_90px_-30px_rgba(2,6,23,0.45)] motion-safe:animate-fade-up dark:border-[#3f3f46] dark:from-zinc-800 dark:via-zinc-900 dark:to-zinc-950 dark:shadow-[0_30px_90px_-30px_rgba(0,0,0,0.7)] lg:flex"
+          style={{ animationDelay: '90ms' }}
+        >
+          {/* Textura sutil + brilho ambiente — quebram a chapa sólida do gradiente escuro */}
+          <div className="pointer-events-none absolute inset-0 bg-grain opacity-[0.06] mix-blend-overlay" />
+          <div className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl motion-safe:animate-drift" />
+
+          <CardContent className="relative flex flex-1 flex-col justify-between gap-10 p-9 sm:p-11">
+
+            {/* Identidade */}
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+                <ControllerLogo className="h-8 w-8" />
+              </div>
+              <div>
+                <div className="text-base font-semibold leading-tight">Automation HUB</div>
+                <div className="text-sm text-slate-400">Controller</div>
+              </div>
+            </div>
+
+            {/* Contexto + headline */}
+            <div className="space-y-5">
+              <p className="max-w-sm text-base leading-relaxed text-slate-300 [text-wrap:pretty]">
+                Portal interno onde <strong className="text-white">funcionários</strong> disparam robôs,{' '}
+                <strong className="text-white">gestores</strong> acompanham execuções por departamento e a{' '}
+                <strong className="text-white">diretoria</strong> consulta o ganho de tempo gerado pelas automações.
+              </p>
+
+              <h1 className="text-3xl font-semibold tracking-tight [text-wrap:balance] sm:text-4xl">
+                Logs reais,{' '}
+                <span className="text-sky-400">histórico completo</span>{' '}
+                e controle de fila.
+              </h1>
+            </div>
+
+          </CardContent>
+        </Card>
+
       </div>
     </div>
   );

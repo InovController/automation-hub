@@ -13,7 +13,9 @@ const badgeVariants = cva(
         queued: 'border-indigo-200 bg-indigo-100 text-indigo-700 dark:border-indigo-500/40 dark:bg-indigo-950 dark:text-indigo-200',
         error: 'border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-500/40 dark:bg-amber-950 dark:text-amber-200',
         canceled: 'border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-500/40 dark:bg-rose-950 dark:text-rose-200',
-        muted: 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-500/35 dark:bg-slate-800 dark:text-slate-200',
+        muted: 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-500/35 dark:bg-slate-800 dark:text-zinc-200',
+        warning: 'border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-500/40 dark:bg-amber-950 dark:text-amber-200',
+        danger: 'border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-500/40 dark:bg-rose-950 dark:text-rose-200',
       },
     },
     defaultVariants: {

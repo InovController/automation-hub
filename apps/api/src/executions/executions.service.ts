@@ -5,10 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ExecutionStatus, Prisma, type User } from '@prisma/client';
-import { writeFile } from 'node:fs/promises';
+import { copyFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
-import { canAccessExecution, canAccessRobot, isAdmin, isManager } from '../shared/access';
+import { buildExecutionScope, canAccessExecution, canAccessRobot } from '../shared/access';
 import { toUserFileName, uniqueStoredFileName } from '../shared/files';
 import { ensureExecutionDirs, inputDir, storageRoot } from '../shared/storage';
 
@@ -17,6 +17,7 @@ type UploadFile = {
   mimetype?: string;
   size?: number;
   buffer?: Buffer;
+  path?: string;
 };
 
 type CreateExecutionInput = {
@@ -73,13 +74,22 @@ export class ExecutionsService {
     if (uploadedFiles.length > 0) {
       const inputFiles = await Promise.all(
         uploadedFiles.map(async (file) => {
-          if (!file.buffer) {
-            throw new InternalServerErrorException('Uploaded file buffer is empty');
-          }
-
           const storedName = uniqueStoredFileName(file.originalname ?? 'arquivo');
           const absolutePath = join(inputDir(execution.id), storedName);
-          await writeFile(absolutePath, file.buffer);
+
+          if (file.path) {
+            // disk storage — move do temp dir do multer
+            try {
+              await rename(file.path, absolutePath);
+            } catch {
+              await copyFile(file.path, absolutePath);
+              await unlink(file.path).catch(() => undefined);
+            }
+          } else if (file.buffer) {
+            await writeFile(absolutePath, file.buffer);
+          } else {
+            throw new InternalServerErrorException('Uploaded file buffer is empty');
+          }
 
           const userFileName = toUserFileName(file.originalname ?? storedName);
           return {
@@ -90,7 +100,7 @@ export class ExecutionsService {
             storagePath: relative(storageRoot, absolutePath).replaceAll('\\', '/'),
             downloadName: userFileName,
             mimeType: file.mimetype,
-            size: file.size ?? file.buffer.length,
+            size: file.size ?? (file.buffer?.length ?? 0),
           };
         }),
       );
@@ -102,6 +112,74 @@ export class ExecutionsService {
     await this.updateProgress(execution.id, 5, 'Aguardando processamento');
 
     return this.getExecution(execution.id, user);
+  }
+
+  async retry(id: string, requestedBy: User) {
+    const original = await this.prisma.execution.findUnique({
+      where: { id },
+      include: { files: true },
+    });
+
+    if (!original) {
+      throw new NotFoundException('Execution not found');
+    }
+
+    if (original.status !== ExecutionStatus.error) {
+      throw new BadRequestException('Só é possível reiniciar execuções com falha.');
+    }
+
+    if (original.cleanedAt) {
+      throw new BadRequestException(
+        'Os arquivos de entrada dessa execução já foram removidos pela retenção. Não é possível reiniciar automaticamente.',
+      );
+    }
+
+    const execution = await this.prisma.execution.create({
+      data: {
+        robotId: original.robotId,
+        userId: original.userId,
+        requestedByName: original.requestedByName,
+        requestedByEmail: original.requestedByEmail,
+        notes: original.notes,
+        priority: original.priority,
+        inputJson: (original.inputJson ?? {}) as Prisma.InputJsonValue,
+      },
+    });
+
+    await ensureExecutionDirs(execution.id);
+
+    const inputFiles = original.files.filter((file) => file.kind === 'input');
+    if (inputFiles.length > 0) {
+      const copiedFiles = await Promise.all(
+        inputFiles.map(async (file) => {
+          const storedName = uniqueStoredFileName(file.originalName ?? file.filename);
+          const absolutePath = join(inputDir(execution.id), storedName);
+          await copyFile(join(storageRoot, file.storagePath), absolutePath);
+
+          return {
+            executionId: execution.id,
+            kind: 'input',
+            filename: storedName,
+            originalName: file.originalName,
+            storagePath: relative(storageRoot, absolutePath).replaceAll('\\', '/'),
+            downloadName: file.downloadName,
+            mimeType: file.mimeType,
+            size: file.size,
+          };
+        }),
+      );
+
+      await this.prisma.executionFile.createMany({ data: copiedFiles });
+    }
+
+    await this.log(
+      execution.id,
+      'info',
+      `Execução reiniciada com as mesmas entradas da execução ${original.id} por ${requestedBy.name}.`,
+    );
+    await this.updateProgress(execution.id, 5, 'Aguardando processamento');
+
+    return this.getExecution(execution.id, requestedBy);
   }
 
   async listExecutions(user: User) {
@@ -218,14 +296,24 @@ export class ExecutionsService {
   }
 
   async markAsRunning(id: string) {
-    return this.prisma.execution.update({
-      where: { id },
+    // Só reivindica execuções ainda na fila: uma execução cancelada entre a
+    // listagem da fila e este ponto não pode voltar a "running"
+    const claimed = await this.prisma.execution.updateMany({
+      where: { id, status: ExecutionStatus.queued },
       data: {
         status: ExecutionStatus.running,
         startedAt: new Date(),
         progress: 15,
         currentStep: 'Inicializando ambiente',
       },
+    });
+
+    if (claimed.count === 0) {
+      return null;
+    }
+
+    return this.prisma.execution.findUnique({
+      where: { id },
       include: {
         robot: true,
         files: true,
@@ -310,8 +398,13 @@ export class ExecutionsService {
       throw new NotFoundException('Execution not found');
     }
 
-    return this.prisma.execution.update({
-      where: { id },
+    // Guarda de status: um cancel atrasado não pode sobrescrever uma execução
+    // que já terminou (success/error viraria canceled)
+    const result = await this.prisma.execution.updateMany({
+      where: {
+        id,
+        status: { in: [ExecutionStatus.queued, ExecutionStatus.running] },
+      },
       data: {
         status: ExecutionStatus.canceled,
         canceledAt: new Date(),
@@ -319,6 +412,12 @@ export class ExecutionsService {
         currentStep: 'Cancelado pelo usuário',
       },
     });
+
+    if (result.count === 0) {
+      throw new BadRequestException('A execução já foi finalizada e não pode ser cancelada.');
+    }
+
+    return this.prisma.execution.findUniqueOrThrow({ where: { id } });
   }
 
   async updateProgress(id: string, progress: number, currentStep: string) {
@@ -362,28 +461,6 @@ export class ExecutionsService {
       data: input,
     });
   }
-}
-
-function buildExecutionScope(user: User): Prisma.ExecutionWhereInput | undefined {
-  if (isAdmin(user)) {
-    return undefined;
-  }
-
-  if (isManager(user)) {
-    if (user.departments.length === 0) {
-      return { userId: user.id };
-    }
-
-    return {
-      user: {
-        departments: {
-          hasSome: user.departments,
-        },
-      },
-    };
-  }
-
-  return { userId: user.id };
 }
 
 function calculateManualEstimatedSeconds(

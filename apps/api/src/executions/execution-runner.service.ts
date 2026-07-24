@@ -1,8 +1,9 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { access, writeFile } from 'node:fs/promises';
+import { access, writeFile, unlink } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { join, relative } from 'node:path';
+import AdmZip from 'adm-zip';
 import { fileURLToPath } from 'node:url';
 import { ExecutionStatus } from '@prisma/client';
 import { ExecutionsService } from './executions.service';
@@ -60,6 +61,9 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
     const running = this.runningProcesses.get(executionId);
     this.logger.log(`stopExecution: executionId=${executionId} running=${!!running} pid=${running?.child.pid}`);
     this.stoppedExecutions.add(executionId);
+    // Auto-expira: execuções canceladas ainda na fila nunca passam pelo
+    // finally de runExecution, e o set cresceria para sempre
+    setTimeout(() => this.stoppedExecutions.delete(executionId), 10 * 60 * 1000).unref?.();
     if (running) {
       await terminateProcessTree(running.child.pid);
       // Force-close stdio streams so the Node.js 'close' event fires even if
@@ -198,6 +202,12 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
 
   private async runExecution(executionId: string) {
     const execution = await this.executionsService.markAsRunning(executionId);
+    if (!execution) {
+      // Cancelada (ou já reivindicada) entre a listagem da fila e agora
+      this.stoppedExecutions.delete(executionId);
+      return;
+    }
+
     await ensureExecutionDirs(execution.id);
     await this.writeExecutionMetadata(execution.id, execution.inputJson, execution.robot);
     await this.executionsService.log(execution.id, 'info', 'Execucao iniciada.');
@@ -234,6 +244,7 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
           ? Math.max(0, Math.round(unitsProcessedRaw))
           : null;
 
+      await this.zipOutputDirectory(execution.id);
       const outputFiles = await this.registerOutputFiles(execution.id);
 
       await this.executionsService.markAsSuccess(
@@ -250,6 +261,7 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
       const current = await this.executionsService.getExecution(execution.id);
 
       try {
+        await this.zipOutputDirectory(execution.id);
         const registered = await this.registerOutputFiles(execution.id);
         this.logger.log(`registerOutputFiles: ${registered.length} arquivo(s) registrado(s) para execucao ${execution.id}`);
       } catch (regError) {
@@ -380,6 +392,23 @@ export class ExecutionRunnerService implements OnModuleInit, OnModuleDestroy {
 
     if (!this.stoppedExecutions.has(executionId)) {
       await this.executionsService.updateProgress(executionId, 90, 'Finalizando saidas');
+    }
+  }
+
+  private async zipOutputDirectory(executionId: string): Promise<void> {
+    const outDir = outputDir(executionId);
+    const files = await listFilesRecursively(outDir);
+    if (files.length < 2) return; // 0 ou 1 arquivo — não precisa zipar
+
+    const zip = new AdmZip();
+    for (const file of files) {
+      const name = file.split(/[\\/]/).pop() ?? 'arquivo';
+      zip.addLocalFile(file, '', name);
+    }
+    zip.writeZip(join(outDir, 'output.zip'));
+
+    for (const file of files) {
+      await unlink(file).catch(() => {});
     }
   }
 

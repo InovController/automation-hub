@@ -1,7 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from './prisma/prisma.service';
-import { COMPANY_DEPARTMENTS } from './shared/access';
 
 @Injectable()
 export class SeedService implements OnModuleInit {
@@ -14,8 +13,10 @@ export class SeedService implements OnModuleInit {
   }
 
   private async ensureAdminBootstrap() {
+    // Considera apenas admins ativos: um admin desativado não pode ser a
+    // razão de ninguém ser promovido (lockout permanente).
     const adminCount = await this.prisma.user.count({
-      where: { role: UserRole.admin },
+      where: { role: UserRole.admin, isActive: true },
     });
 
     if (adminCount > 0) {
@@ -34,10 +35,8 @@ export class SeedService implements OnModuleInit {
       where: { id: firstUser.id },
       data: {
         role: UserRole.admin,
-        departments:
-          firstUser.departments.length > 0
-            ? firstUser.departments
-            : COMPANY_DEPARTMENTS,
+        isActive: true,
+        departments: firstUser.departments,
       },
     });
 

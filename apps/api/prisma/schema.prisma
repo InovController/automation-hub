@@ -33,67 +33,195 @@ enum UserRole {
   employee
 }
 
-enum Department {
-  pessoal
-  fiscal
-  contabil
-  tecnologia
-  inovacao
-  legalizacao
-  certificacao
-  auditoria
-  rh
+enum SiteStatus {
+  online
+  maintenance
+  down
+}
+
+enum SiteCategory {
+  sistema
+  bi
+}
+
+enum AutomationRequestStatus {
+  pending
+  review
+  approved
+  in_progress
+  done
+  rejected
+}
+
+enum AutomationRequestUrgency {
+  low
+  normal
+  high
+  urgent
+}
+
+enum AutomationRequestCadence {
+  once
+  daily
+  weekly
+  monthly
+}
+
+model SharedCredential {
+  id                 String   @id @default(cuid())
+  name               String
+  url                String?
+  login              String
+  password           String
+  notes              String?
+  allowedDepartments String[] @default([])
+  minRole            UserRole @default(employee)
+  order              Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model AutomationRequest {
+  id                String                    @id @default(cuid())
+  requesterUserId   String
+  requesterUser     User                      @relation(fields: [requesterUserId], references: [id], onDelete: Cascade)
+  requesterName     String
+  requesterEmail    String
+  title             String
+  systemName        String?
+  portalUrl         String?
+  description       String
+  urgency           AutomationRequestUrgency  @default(normal)
+  cadence           AutomationRequestCadence  @default(once)
+  requiresLogin     Boolean                   @default(false)
+  requiresCertificate Boolean                 @default(false)
+  requiresCaptcha   Boolean                   @default(false)
+  status            AutomationRequestStatus   @default(pending)
+  adminNotes        String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([requesterUserId, createdAt])
+}
+
+model DepartmentConfig {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Site {
+  id                  String       @id @default(cuid())
+  slug                String       @unique
+  name                String
+  url                 String
+  description         String?
+  category            SiteCategory @default(sistema)
+  status              SiteStatus   @default(online)
+  maintenanceOverride Boolean      @default(false)
+  order               Int          @default(0)
+  lastCheckedAt       DateTime?
+  faviconStoragePath  String?
+  faviconMimeType     String?
+  allowedDepartments  String[]     @default([])
+  minRole             UserRole     @default(employee)
+  powerbiGroupId          String?
+  powerbiDatasetId        String?
+  powerbiRefreshStatus    String?
+  powerbiRefreshRequestId String?
+  powerbiLastRefreshAt    DateTime?
+  powerbiScheduledTimes   String[]     @default([])
+  powerbiShowRefresh      Boolean      @default(true)
+  ssoEnabled              Boolean      @default(false)
+  createdAt              DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  refreshLogs PowerBIRefreshLog[]
+}
+
+model PowerBIRefreshLog {
+  id               String    @id @default(cuid())
+  siteId           String
+  site             Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  requestedByName  String?
+  requestedByEmail String?
+  status           String    @default("Unknown")
+  requestedAt      DateTime  @default(now())
+  completedAt      DateTime?
+
+  @@index([siteId, requestedAt])
+  @@index([requestedAt])
 }
 
 model Robot {
-  id                 String  @id @default(cuid())
-  slug               String  @unique
-  name               String
-  summary            String?
-  description        String?
-  category           String?
-  icon               String? @default("bot")
-  isActive           Boolean @default(true)
-  version            String  @default("1.0.0")
-  estimatedMinutes   Int?
-  maxConcurrency     Int     @default(1)
-  conflictKeys       String?
-  manualSecondsPerUnit Int @default(0)
-  unitLabel          String? @default("item")
-  unitMetricKey      String? @default("itens_processados")
-  command            String?
-  workingDirectory   String?
-  scriptFileName     String?
-  allowedDepartments Department[] @default([])
-  schema             Json?
-  documentationUrl   String?
-  documentationLabel String?
-  supportLabel       String?
-  supportValue       String?
-  dataPolicy         String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                   String       @id @default(cuid())
+  slug                 String       @unique
+  name                 String
+  summary              String?
+  description          String?
+  category             String?
+  icon                 String?      @default("bot")
+  isActive             Boolean      @default(true)
+  version              String       @default("1.0.0")
+  estimatedMinutes     Int?
+  maxConcurrency       Int          @default(1)
+  conflictKeys         String?
+  manualSecondsPerUnit Int          @default(0)
+  unitLabel            String?      @default("item")
+  unitMetricKey        String?      @default("itens_processados")
+  zipOutput            Boolean      @default(false)
+  command              String?
+  workingDirectory     String?
+  scriptFileName       String?
+  isExternal           Boolean      @default(false)
+  apiKeyHash           String?      @unique
+  allowedDepartments   String[]     @default([])
+  schema               Json?
+  documentationUrl     String?
+  documentationLabel   String?
+  supportLabel         String?
+  supportValue         String?
+  dataPolicy           String?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
-  executions Execution[]
+  executions     Execution[]
   scheduledTasks ScheduledTask[]
-  inputExamples RobotInputExample[]
+  inputExamples  RobotInputExample[]
 }
 
 model User {
-  id           String    @id @default(cuid())
+  id           String       @id @default(cuid())
   name         String
-  email        String    @unique
+  email        String       @unique
+  athenasLogin String?      @unique
   passwordHash String
-  role         UserRole  @default(employee)
-  departments  Department[] @default([])
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  role         UserRole     @default(employee)
+  departments  String[]     @default([])
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   sessions       Session[]
   executions     Execution[]
   scheduledTasks ScheduledTask[]
+  automationRequests AutomationRequest[]
   notifications  Notification[]
+}
+
+model ExternalIdentity {
+  login      String   @id
+  name       String
+  department String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([department])
 }
 
 model Session {
@@ -108,37 +236,42 @@ model Session {
 }
 
 model Execution {
-  id               String @id @default(cuid())
-  robotId          String
-  robot            Robot  @relation(fields: [robotId], references: [id])
-  userId           String?
-  user             User?  @relation(fields: [userId], references: [id])
-  requestedByName  String?
-  requestedByEmail String?
-  notes            String?
-  status           ExecutionStatus @default(queued)
-  priority         Int             @default(0)
-  progress         Int             @default(0)
-  currentStep      String?
-  inputJson        Json?
-  unitsProcessed   Int?
+  id                     String          @id @default(cuid())
+  robotId                String
+  robot                  Robot           @relation(fields: [robotId], references: [id])
+  userId                 String?
+  user                   User?           @relation(fields: [userId], references: [id])
+  requestedByName        String?
+  requestedByEmail       String?
+  notes                  String?
+  status                 ExecutionStatus @default(queued)
+  priority               Int             @default(0)
+  progress               Int             @default(0)
+  currentStep            String?
+  inputJson              Json?
+  unitsProcessed         Int?
   manualEstimatedSeconds Int?
-  errorMessage     String?
-  outputZipPath    String?
-  createdAt        DateTime  @default(now())
-  startedAt        DateTime?
-  finishedAt       DateTime?
-  canceledAt       DateTime?
+  errorMessage           String?
+  outputZipPath          String?
+  createdAt              DateTime        @default(now())
+  startedAt              DateTime?
+  finishedAt             DateTime?
+  canceledAt             DateTime?
+  cleanedAt              DateTime?
+  externalId             String?
 
-  scheduledTaskId  String?
-  logs             ExecutionLog[]
-  files            ExecutionFile[]
-  notifications    Notification[]
+  scheduledTaskId String?
+  logs            ExecutionLog[]
+  files           ExecutionFile[]
+  notifications   Notification[]
 
+  @@unique([robotId, externalId])
   @@index([robotId])
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@index([scheduledTaskId])
+  @@index([createdAt])
+  @@index([cleanedAt, finishedAt])
 }
 
 model ExecutionLog {
@@ -153,39 +286,43 @@ model ExecutionLog {
 }
 
 model ExecutionFile {
-  id          String    @id @default(cuid())
-  executionId String
-  execution   Execution @relation(fields: [executionId], references: [id])
-  kind        String    @default("output")
-  filename    String
+  id           String    @id @default(cuid())
+  executionId  String
+  execution    Execution @relation(fields: [executionId], references: [id])
+  kind         String    @default("output")
+  filename     String
   originalName String?
-  storagePath String
+  storagePath  String
   downloadName String?
-  mimeType    String?
-  size        Int?
-  createdAt   DateTime  @default(now())
+  mimeType     String?
+  size         Int?
+  createdAt    DateTime  @default(now())
 
   @@index([executionId, createdAt])
 }
 
 model ScheduledTask {
-  id            String            @id @default(cuid())
-  name          String
-  robotId       String
-  robot         Robot             @relation(fields: [robotId], references: [id])
-  userId        String
-  user          User              @relation(fields: [userId], references: [id])
-  frequency     ScheduleFrequency
-  timeOfDay     String
-  startDate     DateTime?
-  dayOfWeek     Int?
-  dayOfMonth    Int?
-  timezone      String            @default("America/Sao_Paulo")
-  notes         String?
-  parameters    Json?
+  id                   String            @id @default(cuid())
+  name                 String
+  robotId              String
+  robot                Robot             @relation(fields: [robotId], references: [id])
+  userId               String
+  user                 User              @relation(fields: [userId], references: [id])
+  frequency            ScheduleFrequency
+  timeOfDay            String
+  timesOfDay           String[]          @default([])
+  startDate            DateTime?
+  dayOfWeek            Int?
+  dayOfMonth           Int?
+  timezone             String            @default("America/Sao_Paulo")
+  notes                String?
+  parameters           Json?
   recipientScope       RecipientScope    @default(specific)
-  recipientDepartments Department[]      @default([])
+  recipientDepartments String[]          @default([])
   recipientUserIds     String[]          @default([])
+  creditMode           String            @default("creator")
+  creditUserIds        String[]          @default([])
+  creditDepartment     String?
   isActive             Boolean           @default(true)
   lastRunAt            DateTime?
   nextRunAt            DateTime

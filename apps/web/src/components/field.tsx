@@ -14,9 +14,9 @@ export function Field({
 }) {
   return (
     <label className={cn('grid gap-2', className)}>
-      <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{label}</span>
+      <span className="text-sm font-medium text-slate-700 dark:text-zinc-200">{label}</span>
       {children}
-      {hint ? <span className="text-xs text-slate-500 dark:text-slate-400">{hint}</span> : null}
+      {hint ? <span className="text-xs text-slate-500 dark:text-zinc-400">{hint}</span> : null}
     </label>
   );
 }

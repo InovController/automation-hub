@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 const AUTH_TOKEN_KEY = 'automation-hub-token';
 
 export function getStoredToken() {
@@ -53,7 +53,13 @@ export async function downloadFile(url: string, filename: string) {
   if (token) headers.set('Authorization', `Bearer ${token}`);
 
   const response = await fetch(url, { headers });
-  if (!response.ok) throw new Error(`Erro ${response.status} ao baixar arquivo`);
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401
+        ? 'Sessão expirada. Entre novamente para baixar o arquivo.'
+        : `Erro ${response.status} ao baixar o arquivo.`,
+    );
+  }
 
   const blob = await response.blob();
   const objectUrl = URL.createObjectURL(blob);
@@ -64,4 +70,16 @@ export async function downloadFile(url: string, filename: string) {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(objectUrl);
+}
+
+export async function downloadWithFeedback(
+  url: string,
+  filename: string,
+  notify: (message: string) => void,
+) {
+  try {
+    await downloadFile(url, filename);
+  } catch (error) {
+    notify(error instanceof Error ? error.message : 'Não foi possível baixar o arquivo.');
+  }
 }

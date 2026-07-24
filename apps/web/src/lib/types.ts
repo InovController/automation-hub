@@ -1,15 +1,15 @@
 export type UserRole = 'admin' | 'manager' | 'employee';
 
-export type Department =
-  | 'pessoal'
-  | 'fiscal'
-  | 'contabil'
-  | 'tecnologia'
-  | 'inovacao'
-  | 'legalizacao'
-  | 'certificacao'
-  | 'auditoria'
-  | 'rh';
+export type Department = string;
+
+export type DepartmentConfig = {
+  id: string;
+  slug: string;
+  name: string;
+  isActive: boolean;
+  order: number;
+  createdAt: string;
+};
 
 export type User = {
   id: string;
@@ -22,6 +22,15 @@ export type User = {
 export type ManagedUser = User & {
   isActive: boolean;
   createdAt: string;
+};
+
+export type UnlinkedExternalIdentity = {
+  login: string;
+  receivedName: string;
+  executions: number;
+  savedSeconds: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
 };
 
 export type SessionResponse = {
@@ -37,6 +46,7 @@ export type RobotSchemaField = {
   placeholder?: string;
   options?: string[];
   defaultValue?: string;
+  adminOnly?: boolean;
 };
 
 export type RobotSchemaFileInput = {
@@ -102,8 +112,11 @@ export type Robot = {
   unitLabel?: string | null;
   unitMetricKey?: string | null;
   conflictKeys?: string | null;
+  zipOutput?: boolean;
   command?: string | null;
   workingDirectory?: string | null;
+  isExternal?: boolean;
+  hasApiKey?: boolean;
   scriptFileName?: string | null;
   allowedDepartments: Department[];
   schema?: RobotSchema;
@@ -128,6 +141,7 @@ export type Execution = {
   manualEstimatedSeconds?: number | null;
   requestedByName?: string | null;
   requestedByEmail?: string | null;
+  scheduledTaskId?: string | null;
   createdAt: string;
   startedAt?: string | null;
   finishedAt?: string | null;
@@ -151,6 +165,7 @@ export type ScheduledTask = {
   };
   frequency: 'once' | 'daily' | 'weekly' | 'monthly';
   timeOfDay: string;
+  timesOfDay: string[];
   startDate?: string | null;
   dayOfWeek?: number | null;
   dayOfMonth?: number | null;
@@ -160,6 +175,9 @@ export type ScheduledTask = {
   recipientScope: RecipientScope;
   recipientDepartments: Department[];
   recipientUserIds: string[];
+  creditMode?: string;
+  creditUserIds?: string[];
+  creditDepartment?: string | null;
   isActive: boolean;
   lastRunAt?: string | null;
   nextRunAt: string;
@@ -231,6 +249,13 @@ export type TimeSavingsReport = {
     manualEstimatedSeconds: number;
     unitsProcessed: number;
   }>;
+  byDepartment: Array<{
+    department: string;
+    executions: number;
+    savedSeconds: number;
+    manualEstimatedSeconds: number;
+    unitsProcessed: number;
+  }>;
   trend: Array<{
     day: string;
     savedSeconds: number;
@@ -248,4 +273,81 @@ export type TimeSavingsReport = {
     manualEstimatedSeconds: number;
     savedSeconds: number;
   }>;
+};
+
+export type SiteStatus = 'online' | 'maintenance' | 'down';
+export type SiteCategory = 'sistema' | 'bi';
+
+export type PowerBIRefreshLog = {
+  id: string;
+  siteId: string;
+  site: { id: string; name: string };
+  requestedByName?: string | null;
+  requestedByEmail?: string | null;
+  status: string;
+  requestedAt: string;
+  completedAt?: string | null;
+};
+
+export type Site = {
+  id: string;
+  slug: string;
+  name: string;
+  url: string;
+  description?: string | null;
+  category: SiteCategory;
+  status: SiteStatus;
+  maintenanceOverride: boolean;
+  hasFavicon: boolean;
+  order: number;
+  lastCheckedAt?: string | null;
+  allowedDepartments: Department[];
+  minRole: 'employee' | 'manager';
+  powerbiGroupId?: string | null;
+  powerbiDatasetId?: string | null;
+  powerbiRefreshStatus?: string | null;
+  powerbiLastRefreshAt?: string | null;
+  powerbiScheduledTimes?: string[];
+  powerbiShowRefresh?: boolean;
+  ssoEnabled?: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SharedCredential = {
+  id: string;
+  name: string;
+  url?: string | null;
+  login: string;
+  password: string;
+  notes?: string | null;
+  allowedDepartments: Department[];
+  minRole: 'employee' | 'manager';
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AutomationRequestStatus = 'pending' | 'review' | 'approved' | 'in_progress' | 'done' | 'rejected';
+export type AutomationRequestUrgency = 'low' | 'normal' | 'high' | 'urgent';
+export type AutomationRequestCadence = 'once' | 'daily' | 'weekly' | 'monthly';
+
+export type AutomationRequest = {
+  id: string;
+  requesterUserId: string;
+  requesterName: string;
+  requesterEmail: string;
+  title: string;
+  systemName?: string | null;
+  portalUrl?: string | null;
+  description: string;
+  urgency: AutomationRequestUrgency;
+  cadence: AutomationRequestCadence;
+  requiresLogin: boolean;
+  requiresCertificate: boolean;
+  requiresCaptcha: boolean;
+  status: AutomationRequestStatus;
+  adminNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
 };

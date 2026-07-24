@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthService } from '../auth/auth.service';
 import { UsersService } from './users.service';
@@ -15,6 +15,23 @@ export class UsersController {
     const user = await this.authService.requireUser(request);
     this.authService.ensureAdmin(user);
     return this.usersService.listUsers();
+  }
+
+  @Get('unlinked-identities')
+  async listUnlinkedIdentities(@Req() request: Request) {
+    const user = await this.authService.requireUser(request);
+    this.authService.ensureAdmin(user);
+    return this.usersService.listUnlinkedIdentities();
+  }
+
+  @Post('unlinked-identities/link')
+  async linkUnlinkedIdentity(
+    @Body() body: { login?: unknown; userId?: unknown },
+    @Req() request: Request,
+  ) {
+    const user = await this.authService.requireUser(request);
+    this.authService.ensureAdmin(user);
+    return this.usersService.linkUnlinkedIdentity(body);
   }
 
   @Patch(':id')

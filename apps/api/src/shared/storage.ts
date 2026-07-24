@@ -5,6 +5,7 @@ export const storageRoot = join(process.cwd(), 'storage');
 export const executionsRoot = join(storageRoot, 'executions');
 export const schedulesRoot = join(storageRoot, 'schedules');
 export const robotsRoot = join(storageRoot, 'robots');
+export const sitesRoot = join(storageRoot, 'sites');
 
 export function executionRoot(executionId: string) {
   return join(executionsRoot, executionId);
@@ -72,4 +73,12 @@ export async function ensureRobotScriptsDirs(robotId: string) {
 
 export async function ensureRobotPipDir(robotId: string) {
   await mkdir(robotPipDir(robotId), { recursive: true });
+}
+
+export function siteRoot(siteId: string) {
+  return join(sitesRoot, siteId);
+}
+
+export async function ensureSiteDir(siteId: string) {
+  await mkdir(siteRoot(siteId), { recursive: true });
 }

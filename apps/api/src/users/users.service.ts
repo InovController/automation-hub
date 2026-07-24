@@ -1,11 +1,15 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
+import { ExecutionIdentitiesService } from '../execution-identities/execution-identities.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeDepartments } from '../shared/access';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly identities: ExecutionIdentitiesService,
+  ) {}
 
   async listUsers() {
     return this.prisma.user.findMany({
@@ -43,7 +47,24 @@ export class UsersService {
       throw new BadRequestException('Selecione pelo menos um departamento.');
     }
 
-    return this.prisma.user.update({
+    // Não deixa rebaixar/desativar o último admin ativo — seria lockout
+    // permanente do painel de administração
+    const losesAdminAccess =
+      user.role === UserRole.admin &&
+      user.isActive &&
+      (role !== UserRole.admin || !isActive);
+    if (losesAdminAccess) {
+      const activeAdmins = await this.prisma.user.count({
+        where: { role: UserRole.admin, isActive: true },
+      });
+      if (activeAdmins <= 1) {
+        throw new BadRequestException(
+          'Este é o último administrador ativo. Promova outro usuário antes de rebaixá-lo ou desativá-lo.',
+        );
+      }
+    }
+
+    const updatedUser = await this.prisma.user.update({
       where: { id },
       data: {
         role,
@@ -60,6 +81,19 @@ export class UsersService {
         createdAt: true,
       },
     });
+
+    await this.identities.reconcileUser(updatedUser.id);
+    return updatedUser;
+  }
+
+  listUnlinkedIdentities() {
+    return this.identities.listUnlinkedIdentities();
+  }
+
+  linkUnlinkedIdentity(input: { login?: unknown; userId?: unknown }) {
+    const login = typeof input.login === 'string' ? input.login : '';
+    const userId = typeof input.userId === 'string' ? input.userId : '';
+    return this.identities.linkIdentity(login, userId);
   }
 }
 

@@ -1,4 +1,4 @@
-import { Download, FileInput, Files, SquareTerminal } from 'lucide-react';
+import { Download, FileInput, Files, RefreshCw, SquareTerminal } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { PageHeader } from '../components/page-header';
 import { Badge } from '../components/ui/badge';
@@ -6,18 +6,22 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Progress } from '../components/ui/progress';
 import { Separator } from '../components/ui/separator';
+import { useAuth } from '../contexts/auth-context';
 import { useHub } from '../contexts/hub-context';
-import { api, downloadFile } from '../lib/api';
+import { api, downloadWithFeedback } from '../lib/api';
 import type { Execution } from '../lib/types';
 import { formatDate, statusLabel, statusVariant, userFileName } from '../lib/utils';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 export function ExecutionPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const { notify, refreshHub } = useHub();
   const [execution, setExecution] = useState<Execution | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isCanceling, setIsCanceling] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,26 +53,64 @@ export function ExecutionPage() {
     };
   }, [id]);
 
+  const logCount = execution?.logs.length ?? 0;
   useEffect(() => {
+    // Só auto-scrolla quando chega log novo E o usuário já estava no fundo —
+    // senão quem rolou para cima para ler é puxado de volta a cada poll
+    if (logCount === 0) return;
     const terminal = document.querySelector('[data-terminal]');
     if (terminal instanceof HTMLElement) {
-      terminal.scrollTop = terminal.scrollHeight;
+      const nearBottom =
+        terminal.scrollHeight - terminal.scrollTop - terminal.clientHeight < 80;
+      if (nearBottom) {
+        terminal.scrollTop = terminal.scrollHeight;
+      }
     }
-  }, [execution?.logs]);
+  }, [logCount]);
 
-  if (loadError) return <p className="text-sm text-rose-500">{loadError}</p>;
-  if (!execution) return <p className="text-sm text-slate-500">Carregando execução...</p>;
+  if (loadError) {
+    return (
+      <div role="status" className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600 dark:border-rose-500/30 dark:bg-rose-950/20 dark:text-rose-400">
+        {loadError}
+      </div>
+    );
+  }
+
+  if (!execution) {
+    return (
+      <div role="status" aria-live="polite" className="grid grid-cols-1 animate-pulse gap-6">
+        <div className="h-8 w-72 rounded-lg bg-slate-200 dark:bg-slate-800" />
+        <div className="h-32 rounded-3xl bg-slate-100 dark:bg-slate-800/50" />
+        <div className="h-96 rounded-3xl bg-slate-100 dark:bg-slate-800/50" />
+      </div>
+    );
+  }
 
   const isLive = execution.status === 'queued' || execution.status === 'running';
+  const canRetry = execution.status === 'error' && user?.role === 'admin';
   const outputFiles = execution.files.filter((file) => file.kind !== 'input');
   const inputFiles = execution.files.filter((file) => file.kind === 'input');
 
+  async function handleRetry() {
+    if (isRetrying) return;
+    setIsRetrying(true);
+    try {
+      const retried = await api<Execution>(`/executions/${execution!.id}/retry`, { method: 'POST' });
+      notify('Execução reiniciada com as mesmas entradas.');
+      await refreshHub();
+      navigate(`/executions/${retried.id}`);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Não foi possível reiniciar a execução.');
+    } finally {
+      setIsRetrying(false);
+    }
+  }
+
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-1 gap-5">
       <PageHeader
-        eyebrow="Execução"
         title={execution.robot.name}
-        description={`ID ${execution.id} · iniciado em ${formatDate(execution.startedAt || execution.createdAt)}`}
+        description={`${execution.requestedByName || execution.requestedByEmail || 'Usuário interno'} · ${formatDate(execution.startedAt || execution.createdAt)}`}
         badge={<Badge variant={statusVariant(execution.status)}>{statusLabel(execution.status)}</Badge>}
         actions={
           isLive ? (
@@ -90,24 +132,28 @@ export function ExecutionPage() {
             >
               {isCanceling ? 'Cancelando...' : 'Cancelar execução'}
             </Button>
+          ) : canRetry ? (
+            <Button variant="outline" disabled={isRetrying} onClick={() => void handleRetry()}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${isRetrying ? 'animate-spin' : ''}`} />
+              {isRetrying ? 'Reiniciando...' : 'Reiniciar com mesmas entradas'}
+            </Button>
           ) : null
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard label="Progresso" value={`${execution.progress}%`} />
-        <MetricCard label="Solicitante" value={execution.requestedByName || execution.requestedByEmail || 'Usuário interno'} />
-        <MetricCard label="Status" value={statusLabel(execution.status)} />
-      </div>
-
       <Card className="rounded-3xl">
         <CardHeader>
-          <CardTitle>Andamento</CardTitle>
-          <CardDescription>{execution.currentStep || 'Aguardando início'}</CardDescription>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <CardTitle>Andamento</CardTitle>
+              <CardDescription>{execution.currentStep || 'Aguardando início'}</CardDescription>
+            </div>
+            <span className="text-2xl font-semibold tabular-nums text-slate-950 dark:text-white">{execution.progress}%</span>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <Progress value={execution.progress} />
-          <div className="flex flex-wrap gap-4 text-sm text-slate-500 dark:text-slate-400">
+          <div className="flex flex-wrap gap-4 text-sm text-slate-500 dark:text-zinc-400">
             <span>Criado em {formatDate(execution.createdAt)}</span>
             {execution.finishedAt ? <span>Finalizado em {formatDate(execution.finishedAt)}</span> : null}
             {execution.errorMessage ? <span className="text-rose-500">Erro: {execution.errorMessage}</span> : null}
@@ -115,12 +161,12 @@ export function ExecutionPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Card className="overflow-hidden rounded-3xl">
           <CardHeader className="border-b border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-3">
               <div className="rounded-xl border border-slate-200 p-2 dark:border-slate-800">
-                <SquareTerminal className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                <SquareTerminal className="h-4 w-4 text-slate-500 dark:text-zinc-400" />
               </div>
               <div>
                 <CardTitle>Logs em tempo real</CardTitle>
@@ -145,11 +191,11 @@ export function ExecutionPage() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-6">
+        <div className="grid grid-cols-1 gap-6">
           <FileCard
             title="Arquivos de saída"
             description="Downloads gerados nesta execução."
-            icon={<Files className="h-4 w-4 text-slate-500 dark:text-slate-400" />}
+            icon={<Files className="h-4 w-4 text-slate-500 dark:text-zinc-400" />}
             files={outputFiles}
             emptyText="Ainda não há arquivos de saída disponíveis."
           />
@@ -157,24 +203,13 @@ export function ExecutionPage() {
           <FileCard
             title="Arquivos de entrada"
             description="Arquivos enviados pelo solicitante."
-            icon={<FileInput className="h-4 w-4 text-slate-500 dark:text-slate-400" />}
+            icon={<FileInput className="h-4 w-4 text-slate-500 dark:text-zinc-400" />}
             files={inputFiles}
             emptyText="Esta execução não recebeu arquivos enviados."
           />
         </div>
       </div>
     </div>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <Card className="rounded-3xl">
-      <CardContent className="space-y-2 p-6">
-        <div className="text-sm text-slate-500 dark:text-slate-400">{label}</div>
-        <div className="text-2xl font-semibold tracking-tight">{value}</div>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -191,6 +226,8 @@ function FileCard({
   files: Execution['files'];
   emptyText: string;
 }) {
+  const { notify } = useHub();
+
   return (
     <Card className="rounded-3xl">
       <CardHeader>
@@ -202,7 +239,7 @@ function FileCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="grid gap-4">
+      <CardContent className="grid grid-cols-1 gap-4">
         {files.length > 0 ? (
           files.map((file, index) => (
             <div key={file.id}>
@@ -211,12 +248,12 @@ function FileCard({
                   <div className="truncate font-medium">
                     {userFileName(file.downloadName || file.originalName || file.filename)}
                   </div>
-                  <div className="text-sm text-slate-500 dark:text-slate-400">{file.kind === 'input' ? 'Entrada' : 'Saída'}</div>
+                  <div className="text-sm text-slate-500 dark:text-zinc-400">{file.kind === 'input' ? 'Entrada' : 'Saída'}</div>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => downloadFile(file.downloadUrl, userFileName(file.downloadName || file.originalName || file.filename))}
+                  onClick={() => void downloadWithFeedback(file.downloadUrl, userFileName(file.downloadName || file.originalName || file.filename), notify)}
                 >
                   <Download className="mr-2 h-4 w-4" />
                   Baixar
@@ -226,7 +263,7 @@ function FileCard({
             </div>
           ))
         ) : (
-          <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+          <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-zinc-400">
             {emptyText}
           </div>
         )}
